@@ -29,6 +29,21 @@ html{scroll-behavior:smooth}
 body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;overflow-x:hidden}
 body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse at 20% 10%,rgba(26,60,120,.4) 0%,transparent 50%),radial-gradient(ellipse at 80% 90%,rgba(10,40,90,.3) 0%,transparent 50%);pointer-events:none;z-index:0}
 
+/* FAVORITER */
+.fav-btn{background:none;border:none;font-size:1.6rem;cursor:pointer;line-height:1;transition:transform .2s;padding:4px}
+.fav-btn:hover{transform:scale(1.2)}
+.fav-panel{position:absolute;top:calc(100% + 8px);right:0;width:260px;background:var(--card2);border:1px solid var(--border);border-radius:16px;z-index:300;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.5);display:none}
+.fav-panel.open{display:block}
+.fav-header{padding:12px 16px;font-size:.78rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--border)}
+.fav-item{display:flex;align-items:center;gap:10px;padding:11px 16px;cursor:pointer;transition:background .15s;border-bottom:1px solid rgba(58,155,213,.08)}
+.fav-item:last-child{border-bottom:none}
+.fav-item:hover{background:rgba(58,155,213,.12)}
+.fav-name{flex:1;font-size:.92rem;font-weight:500}
+.fav-remove{background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem;padding:2px 6px;border-radius:6px;transition:color .15s}
+.fav-remove:hover{color:var(--storm)}
+.fav-empty{padding:20px 16px;text-align:center;color:var(--muted);font-size:.85rem}
+.fav-wrap{position:relative}
+
 /* MOBIL SAFE AREA */
 @supports(padding:max(0px)){
   header{padding-left:max(20px,env(safe-area-inset-left));padding-right:max(20px,env(safe-area-inset-right))}
@@ -319,6 +334,13 @@ main{max-width:1300px;margin:0 auto;padding:24px 16px;display:grid;grid-template
     </button>
     <div id="autocomplete"></div>
   </div>
+  <div class="fav-wrap">
+    <button class="gps-btn" onclick="toggleFavPanel()" id="favToggleBtn" title="Mina favoriter">⭐ Favoriter <span id="favCount"></span></button>
+    <div class="fav-panel" id="favPanel">
+      <div class="fav-header">⭐ Sparade platser</div>
+      <div id="favList"><div class="fav-empty">Inga favoriter än – tryck på ⭐ vid en stad</div></div>
+    </div>
+  </div>
   <button class="gps-btn" onclick="gpsLocate()">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7" stroke-dasharray="2,2"/></svg>
     Min plats
@@ -572,6 +594,7 @@ function renderAll(data,name,lat,lon,auroraData,marineData){
         <div class="hero-location">📍 ${name}</div>
         <div class="hero-time">${formatDate(now)} · ${now.toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit',hour12:false})}</div>
       </div>
+      <button class="fav-btn" onclick="toggleFavorite('${name}',${lat},${lon})" id="heroFavBtn" title="Spara som favorit">${isFavorite(name)?'⭐':'☆'}</button>
     </div>
     <div class="hero-main">
       <div class="hero-icon">${icon}</div>
@@ -1117,7 +1140,7 @@ async function doSearch(){
   if(acResults.length){const r=acResults[0];loadCity(r.name,parseFloat(r.lat),parseFloat(r.lon))}
 }
 
-document.addEventListener('click',e=>{if(!e.target.closest('.search-wrap'))closeAC()});
+// (click-hantering sköts av favorit-lyssnaren ovan)
 
 // ── GPS ──
 function gpsLocate(){
@@ -1133,8 +1156,63 @@ function gpsLocate(){
   },err=>{showLoading(false);showError('Plats ej tillgänglig: '+err.message)},{timeout:10000});
 }
 
+// ── FAVORITER ──
+function getFavs(){try{return JSON.parse(localStorage.getItem('nordvader_favs')||'[]')}catch{return[]}}
+function saveFavs(favs){localStorage.setItem('nordvader_favs',JSON.stringify(favs))}
+
+function isFavorite(name){return getFavs().some(f=>f.name===name)}
+
+function toggleFavorite(name,lat,lon){
+  let favs=getFavs();
+  const idx=favs.findIndex(f=>f.name===name);
+  if(idx>=0){
+    favs.splice(idx,1);
+  } else {
+    favs.unshift({name,lat,lon});
+  }
+  saveFavs(favs);
+  // uppdatera stjärna i hero
+  const btn=document.getElementById('heroFavBtn');
+  if(btn)btn.textContent=isFavorite(name)?'⭐':'☆';
+  renderFavList();
+}
+
+function renderFavList(){
+  const favs=getFavs();
+  const list=document.getElementById('favList');
+  const count=document.getElementById('favCount');
+  if(!list)return;
+  if(count)count.textContent=favs.length?`(${favs.length})`:'';
+  if(!favs.length){
+    list.innerHTML='<div class="fav-empty">Inga favoriter än – tryck på ☆ vid en stad</div>';
+    return;
+  }
+  list.innerHTML=favs.map(f=>`
+    <div class="fav-item" onclick="loadCity('${f.name}',${f.lat},${f.lon});closeFavPanel()">
+      <span style="font-size:1.1rem">📍</span>
+      <span class="fav-name">${f.name}</span>
+      <button class="fav-remove" onclick="event.stopPropagation();toggleFavorite('${f.name}',${f.lat},${f.lon})" title="Ta bort">✕</button>
+    </div>`).join('');
+}
+
+function toggleFavPanel(){
+  const p=document.getElementById('favPanel');
+  if(p)p.classList.toggle('open');
+}
+
+function closeFavPanel(){
+  const p=document.getElementById('favPanel');
+  if(p)p.classList.remove('open');
+}
+
+document.addEventListener('click',e=>{
+  if(!e.target.closest('.fav-wrap'))closeFavPanel();
+  if(!e.target.closest('.search-wrap'))closeAC();
+});
+
 // ── INIT ──
 document.getElementById('loading').classList.add('hidden');
+renderFavList();
 loadCity('Stockholm',59.3293,18.0686);
 
 // ── SERVICE WORKER (PWA) ──
