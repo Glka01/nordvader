@@ -1,0 +1,1148 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NordVäder – Nordens bästa väderapp</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#08101e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="NordVäder">
+<link rel="apple-touch-icon" href="icon-192.png">
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg:#08101e; --surface:#0d1b2a; --card:#112236; --card2:#142844;
+  --accent:#3a9bd5; --accent2:#1e6fa8; --gold:#f5c842;
+  --storm:#ff4e2a; --storm2:#ff8c42; --green:#3dd68c;
+  --text:#e8f4ff; --muted:#7da8c8; --border:rgba(58,155,213,0.18);
+  --thunder:#ffe066; --glow:rgba(58,155,213,0.25);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse at 20% 10%,rgba(26,60,120,.4) 0%,transparent 50%),radial-gradient(ellipse at 80% 90%,rgba(10,40,90,.3) 0%,transparent 50%);pointer-events:none;z-index:0}
+
+/* MOBIL SAFE AREA */
+@supports(padding:max(0px)){
+  header{padding-left:max(20px,env(safe-area-inset-left));padding-right:max(20px,env(safe-area-inset-right))}
+  main{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}
+}
+
+/* HEADER */
+header{position:sticky;top:0;z-index:100;background:rgba(8,16,30,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.logo{font-size:1.4rem;font-weight:800;letter-spacing:-.5px;background:linear-gradient(135deg,#3a9bd5,#7dd3fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent;white-space:nowrap}
+.logo span{color:var(--gold);-webkit-text-fill-color:var(--gold)}
+.search-wrap{flex:1;min-width:220px;max-width:480px;position:relative}
+#searchInput{width:100%;background:var(--card);border:1.5px solid var(--border);border-radius:30px;color:var(--text);font-size:.95rem;padding:9px 44px 9px 18px;outline:none;transition:border-color .2s}
+#searchInput:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--glow)}
+#searchInput::placeholder{color:var(--muted)}
+.search-btn{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:var(--accent);border:none;border-radius:50%;width:32px;height:32px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+#autocomplete{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--card2);border:1px solid var(--border);border-radius:14px;overflow:hidden;z-index:200;display:none}
+#autocomplete .ac-item{padding:10px 18px;cursor:pointer;font-size:.9rem;color:var(--muted);transition:background .15s}
+#autocomplete .ac-item:hover{background:rgba(58,155,213,.15);color:var(--text)}
+.gps-btn{background:var(--card);border:1.5px solid var(--border);border-radius:30px;color:var(--accent);padding:9px 16px;cursor:pointer;font-size:.9rem;white-space:nowrap;transition:all .2s;display:flex;align-items:center;gap:6px}
+.gps-btn:hover{background:var(--card2);border-color:var(--accent)}
+.quick-cities{display:flex;gap:8px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+.quick-cities::-webkit-scrollbar{display:none}
+.qc{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:.82rem;color:var(--muted);cursor:pointer;white-space:nowrap;transition:all .2s}
+.qc:hover{background:var(--card2);color:var(--text);border-color:var(--accent)}
+
+/* MAIN */
+main{max-width:1300px;margin:0 auto;padding:24px 16px;display:grid;grid-template-columns:1fr 1fr;gap:18px;position:relative;z-index:1}
+@media(max-width:900px){main{grid-template-columns:1fr;padding:12px 10px;gap:12px}}
+
+/* MOBIL HERO */
+@media(max-width:600px){
+  .hero-temp{font-size:4rem;letter-spacing:-2px}
+  .hero-icon{font-size:4rem}
+  .hero-stats{grid-template-columns:repeat(2,1fr)}
+  .quick-cities{display:none} /* dölj på liten skärm */
+  header{padding:10px 14px;gap:8px}
+  .logo{font-size:1.2rem}
+  #searchInput{font-size:.9rem}
+  .card{padding:16px;border-radius:16px}
+  .umbrella-answer{font-size:2.8rem}
+  #radarCard{min-height:360px}
+  #radarMap{min-height:280px}
+  .app-chart-wrap{height:160px}
+  .chart-wrap{height:150px}
+  .mini-grid{grid-template-columns:1fr 1fr}
+  .marine-grid{grid-template-columns:1fr 1fr}
+  .ski-conditions{grid-template-columns:1fr 1fr}
+  .forecast-item .fi-desc{display:none}
+}
+
+/* CARDS */
+.card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:22px;position:relative;overflow:hidden;transition:transform .2s,box-shadow .2s}
+.card:hover{transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,0,0,.4)}
+.card-title{font-size:.75rem;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.span2{grid-column:span 2}
+@media(max-width:900px){.span2{grid-column:span 1}}
+
+/* HERO */
+#heroCard{grid-column:span 2;background:linear-gradient(135deg,#0d1b2a 0%,#112a45 60%,#0a1e35 100%);padding:28px;border-radius:24px}
+@media(max-width:900px){#heroCard{grid-column:span 1}}
+.hero-location{font-size:1.5rem;font-weight:700;margin-bottom:4px}
+.hero-time{font-size:.85rem;color:var(--muted)}
+.hero-main{display:flex;align-items:center;gap:20px;flex-wrap:wrap;margin-top:16px}
+.hero-icon{font-size:6rem;line-height:1;filter:drop-shadow(0 0 20px rgba(58,155,213,.5))}
+.hero-temp{font-size:5.5rem;font-weight:800;line-height:1;letter-spacing:-4px;background:linear-gradient(135deg,#e8f4ff,#7dd3fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hero-desc{font-size:1.2rem;color:var(--muted);margin-top:4px;font-weight:500}
+.hero-feels{font-size:.9rem;color:var(--muted);margin-top:6px}
+.hero-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-top:22px}
+.stat-box{background:rgba(255,255,255,.05);border-radius:14px;padding:14px 16px;border:1px solid var(--border)}
+.stat-label{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.8px}
+.stat-value{font-size:1.25rem;font-weight:700;margin-top:2px}
+.stat-sub{font-size:.78rem;color:var(--muted);margin-top:2px}
+
+/* THUNDER ALERT */
+#thunderAlert{grid-column:span 2;display:none}
+@media(max-width:900px){#thunderAlert{grid-column:span 1}}
+.thunder-inner{padding:20px 24px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.thunder-icon{font-size:3rem;animation:tpulse 1.5s ease-in-out infinite}
+@keyframes tpulse{0%,100%{filter:drop-shadow(0 0 8px var(--thunder));opacity:1}50%{filter:drop-shadow(0 0 24px var(--thunder));opacity:.8}}
+.thunder-text h3{font-size:1.2rem;font-weight:800;margin-bottom:4px}
+.thunder-text p{font-size:.88rem;opacity:.85}
+.thunder-level{margin-left:auto;text-align:center;background:rgba(0,0,0,.25);border-radius:12px;padding:10px 18px}
+.thunder-level-val{font-size:1.8rem;font-weight:800}
+.thunder-level-label{font-size:.72rem;opacity:.7;letter-spacing:1px}
+.alert-low{background:linear-gradient(135deg,#1a3a1a,#1e4a1e);border-color:#3dd68c}
+.alert-mod{background:linear-gradient(135deg,#2a2a10,#3a3a10);border-color:var(--gold)}
+.alert-high{background:linear-gradient(135deg,#2a1808,#3a2208);border-color:var(--storm2)}
+.alert-extreme{background:linear-gradient(135deg,#2a0808,#3a0808);border-color:var(--storm)}
+.lightning-bar{width:100%;height:6px;border-radius:3px;background:rgba(255,255,255,.1);margin-top:12px;overflow:hidden}
+.lightning-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--green),var(--gold),var(--storm2),var(--storm));transition:width 1s ease}
+
+/* QUICK CARDS (3-col row) */
+.span3{grid-column:span 2}
+@media(max-width:900px){.span3{grid-column:span 1}}
+.quick-row{grid-column:span 2;display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px}
+@media(max-width:900px){.quick-row{grid-column:span 1;grid-template-columns:1fr}}
+
+/* UMBRELLA CARD */
+.umbrella-answer{font-size:3.5rem;font-weight:900;text-align:center;padding:12px 0;letter-spacing:-2px}
+.umbrella-reason{text-align:center;font-size:.88rem;color:var(--muted);margin-top:4px}
+.umbrella-yes{color:#ff8c42}
+.umbrella-no{color:var(--green)}
+
+/* ROAD CONDITIONS */
+.road-status{display:flex;align-items:center;gap:12px;padding:10px 0}
+.road-icon{font-size:2.5rem}
+.road-label{font-size:1.1rem;font-weight:700}
+.road-sub{font-size:.82rem;color:var(--muted);margin-top:2px}
+.road-items{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.road-item{display:flex;justify-content:space-between;align-items:center;font-size:.82rem;padding:6px 0;border-bottom:1px solid var(--border)}
+.road-item:last-child{border:none}
+.ri-label{color:var(--muted)}
+.ri-val{font-weight:600}
+
+/* MIDNIGHT SUN / POLAR NIGHT */
+.sun-event-display{text-align:center;padding:10px 0}
+.sun-event-icon{font-size:4rem;margin-bottom:8px}
+.sun-event-title{font-size:1.1rem;font-weight:700;margin-bottom:4px}
+.sun-event-desc{font-size:.85rem;color:var(--muted)}
+.sun-countdown{text-align:center;margin-top:14px}
+.countdown-val{font-size:2.5rem;font-weight:800;color:var(--gold)}
+.countdown-label{font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.8px}
+
+/* AURORA */
+.kp-meter{display:flex;gap:4px;margin:10px 0;align-items:flex-end;height:50px}
+.kp-bar{flex:1;border-radius:3px 3px 0 0;transition:height .8s ease;min-height:4px}
+.kp-labels{display:flex;gap:4px;margin-top:4px}
+.kp-label{flex:1;text-align:center;font-size:.65rem;color:var(--muted)}
+.aurora-prob{font-size:2.5rem;font-weight:800;text-align:center;margin:8px 0}
+.aurora-status{text-align:center;font-size:.88rem;color:var(--muted)}
+.aurora-tip{background:rgba(100,200,255,.08);border:1px solid rgba(100,200,255,.2);border-radius:10px;padding:10px 12px;font-size:.82rem;margin-top:12px;line-height:1.5}
+
+/* MARINE */
+.wave-visual{display:flex;align-items:flex-end;gap:8px;margin:10px 0;height:60px}
+.wave-bar{width:20px;border-radius:3px 3px 0 0;background:linear-gradient(to top,var(--accent2),var(--accent))}
+.marine-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.mg-item{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:10px}
+.mg-label{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.7px}
+.mg-val{font-size:1.2rem;font-weight:700;margin-top:2px}
+.mg-sub{font-size:.75rem;color:var(--muted)}
+
+/* POLLEN */
+.pollen-items{display:flex;flex-direction:column;gap:10px;margin-top:4px}
+.pollen-item{display:flex;align-items:center;gap:10px}
+.pollen-name{width:80px;font-size:.85rem;color:var(--muted)}
+.pollen-bar-wrap{flex:1;height:8px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden}
+.pollen-fill{height:100%;border-radius:4px;transition:width .8s ease}
+.pollen-level{font-size:.8rem;font-weight:600;width:60px;text-align:right}
+.pollen-none{color:var(--green)}.pollen-low{color:#a8d870}.pollen-mod{color:var(--gold)}.pollen-high{color:var(--storm2)}.pollen-vhigh{color:var(--storm)}
+
+/* FIRE RISK */
+.fire-gauge{position:relative;text-align:center;padding:8px 0}
+.fire-val{font-size:3rem;font-weight:800}
+.fire-label{font-size:.85rem;color:var(--muted);margin-top:4px}
+.fire-bar{height:10px;border-radius:5px;margin:12px 0;background:linear-gradient(90deg,#3dd68c,#a8d870,#f5c842,#ff8c42,#ff2020)}
+.fire-needle-wrap{position:relative;margin-top:-18px;height:20px}
+.fire-needle{position:absolute;top:0;width:4px;height:18px;background:#fff;border-radius:2px;transform:translateX(-50%);box-shadow:0 0 6px rgba(255,255,255,.5);transition:left 1s ease}
+.fire-factors{display:flex;flex-direction:column;gap:6px;margin-top:14px}
+.ff-item{display:flex;justify-content:space-between;font-size:.8rem}
+.ff-label{color:var(--muted)}
+
+/* SKI */
+.ski-rating{display:flex;gap:4px;margin:8px 0}
+.ski-star{font-size:1.4rem}
+.ski-conditions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.ski-item{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:10px}
+.ski-label{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.7px}
+.ski-val{font-size:1.2rem;font-weight:700;margin-top:2px}
+
+/* DROUGHT */
+.moisture-ring-wrap{text-align:center;padding:4px 0}
+.moisture-val{font-size:2.5rem;font-weight:800;margin-top:4px}
+.moisture-label{font-size:.85rem;color:var(--muted)}
+.drought-facts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.df-item{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:10px}
+.df-label{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.7px}
+.df-val{font-size:1.1rem;font-weight:700;margin-top:2px}
+
+/* HOURLY */
+#hourlyCard{grid-column:span 2}
+@media(max-width:900px){#hourlyCard{grid-column:span 1}}
+.hourly-scroll{display:flex;gap:10px;overflow-x:auto;padding-bottom:8px;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.hourly-item{min-width:72px;text-align:center;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:14px;padding:12px 8px;transition:background .2s;flex-shrink:0}
+.hourly-item:hover{background:rgba(58,155,213,.1)}
+.hourly-item.thunder-hour{border-color:var(--thunder);background:rgba(255,224,102,.08)}
+.hi-time{font-size:.75rem;color:var(--muted);margin-bottom:6px}
+.hi-icon{font-size:1.6rem;margin-bottom:6px}
+.hi-temp{font-size:1rem;font-weight:700}
+.hi-prec{font-size:.72rem;color:#7dd3fc;margin-top:4px}
+.hi-wind{font-size:.72rem;color:var(--muted);margin-top:2px}
+
+/* RADAR */
+#radarCard{min-height:460px;display:flex;flex-direction:column}
+#radarMap{flex:1;border-radius:14px;overflow:hidden;min-height:360px;border:2px solid rgba(58,155,213,.3);box-shadow:0 0 24px rgba(58,155,213,.12);position:relative}
+#radarMap iframe{width:100%;height:100%;border:none;border-radius:12px;display:block}
+.radar-controls{display:flex;gap:8px;margin-top:12px;align-items:center;flex-wrap:wrap}
+.radar-btn{background:var(--card2);border:1.5px solid var(--border);border-radius:10px;color:var(--muted);padding:7px 16px;font-size:.82rem;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:5px}
+.radar-btn.active{background:linear-gradient(135deg,var(--accent2),var(--accent));border-color:var(--accent);color:#fff;box-shadow:0 0 10px rgba(58,155,213,.4)}
+.radar-btn:hover:not(.active){border-color:var(--accent);color:var(--text)}
+#radarTime{font-size:.78rem;color:var(--muted);margin-left:auto;background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:5px 10px}
+#playBtn{background:linear-gradient(135deg,#1e6fa8,#3a9bd5);border:none;border-radius:10px;color:#fff;padding:7px 16px;font-size:.82rem;cursor:pointer;font-weight:600}
+#playBtn:hover{opacity:.85}
+.radar-legend{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:.72rem;color:var(--muted)}
+.legend-bar{flex:1;height:8px;border-radius:4px;background:linear-gradient(90deg,rgba(0,200,100,.8),rgba(100,220,100,.8),rgba(255,220,0,.8),rgba(255,140,0,.8),rgba(255,50,50,.9),rgba(180,0,200,.9))}
+.radar-status{font-size:.75rem;padding:4px 10px;border-radius:6px;display:inline-flex;align-items:center;gap:5px}
+.radar-status.live{background:rgba(61,214,140,.15);color:var(--green);border:1px solid rgba(61,214,140,.3)}
+.radar-status.loading{background:rgba(58,155,213,.1);color:var(--accent);border:1px solid var(--border)}
+.dot-blink{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 1.2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+
+/* PRECIP CHART */
+.chart-wrap{height:180px;position:relative}
+
+/* 7-DAY */
+.forecast-item{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)}
+.forecast-item:last-child{border-bottom:none}
+.fi-day{width:90px;font-size:.9rem;color:var(--muted);font-weight:600}
+.fi-icon{font-size:1.5rem;width:36px;text-align:center}
+.fi-desc{flex:1;font-size:.82rem;color:var(--muted)}
+.fi-prec{font-size:.8rem;color:#7dd3fc;width:42px;text-align:right}
+.fi-temps{text-align:right;min-width:70px}
+.fi-high{font-size:1rem;font-weight:700}
+.fi-low{font-size:.85rem;color:var(--muted)}
+.fi-bar{width:80px;height:5px;border-radius:3px;background:rgba(255,255,255,.08);margin-top:4px;overflow:hidden}
+.fi-bar-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,#3a9bd5,#ff6b35)}
+
+/* WIND COMPASS */
+.compass-wrap{display:flex;flex-direction:column;align-items:center;gap:10px;padding:8px 0}
+.compass{width:130px;height:130px;position:relative}
+.compass-ring{width:100%;height:100%;border-radius:50%;border:2px solid var(--border);position:relative;background:radial-gradient(circle,rgba(58,155,213,.05) 0%,transparent 70%)}
+.compass-dir{position:absolute;font-size:.7rem;font-weight:700;color:var(--muted)}
+.compass-dir.n{top:4px;left:50%;transform:translateX(-50%);color:var(--storm)}
+.compass-dir.s{bottom:4px;left:50%;transform:translateX(-50%)}
+.compass-dir.e{right:6px;top:50%;transform:translateY(-50%)}
+.compass-dir.w{left:6px;top:50%;transform:translateY(-50%)}
+.compass-needle{position:absolute;top:50%;left:50%;width:4px;height:50px;transform-origin:bottom center;transform:translateX(-50%) translateY(-100%);border-radius:2px 2px 0 0;background:linear-gradient(to top,var(--storm),transparent);transition:transform 1s ease}
+.compass-center{position:absolute;top:50%;left:50%;width:10px;height:10px;border-radius:50%;background:var(--text);transform:translate(-50%,-50%)}
+.wind-stats{text-align:center}
+.wind-speed-big{font-size:2.2rem;font-weight:800}
+.wind-unit{font-size:.85rem;color:var(--muted)}
+.wind-gust{font-size:.85rem;color:var(--storm2);margin-top:2px}
+
+/* MINI GRID */
+.mini-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:500px){.mini-grid{grid-template-columns:1fr}}
+.mini-stat{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:4px}
+.ms-label{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.8px}
+.ms-val{font-size:1.4rem;font-weight:700}
+.ms-sub{font-size:.75rem;color:var(--muted)}
+
+/* SUN */
+.sun-bar{height:8px;border-radius:4px;margin:10px 0;background:linear-gradient(90deg,#1e3a5f 0%,#f59e0b 50%,#1e3a5f 100%);position:relative}
+.sun-needle{position:absolute;top:-5px;width:18px;height:18px;border-radius:50%;background:#fbbf24;transform:translateX(-50%);box-shadow:0 0 10px #f59e0b;transition:left 1s ease}
+.sun-times{display:flex;justify-content:space-between;font-size:.8rem;color:var(--muted)}
+
+/* APPARENT TEMP CHART */
+#apparentCard{grid-column:span 2}
+@media(max-width:900px){#apparentCard{grid-column:span 1}}
+.app-chart-wrap{height:200px;position:relative}
+
+/* LOADING */
+#loading{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;gap:16px}
+#loading.hidden{display:none}
+.loader{width:48px;height:48px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ERROR */
+.error-msg{position:fixed;bottom:20px;right:20px;background:#2d1010;border:1px solid var(--storm);border-radius:12px;padding:12px 18px;color:#ff8080;font-size:.88rem;z-index:9998;display:none}
+.error-msg.show{display:block}
+
+/* EMPTY STATE */
+#emptyState{grid-column:span 2;text-align:center;padding:60px 20px;color:var(--muted)}
+#emptyState .es-icon{font-size:5rem;margin-bottom:16px;opacity:.5}
+#emptyState h2{font-size:1.4rem;color:var(--text);margin-bottom:8px}
+</style>
+</head>
+<body>
+
+<div id="loading"><div class="loader"></div><p>Hämtar väderdata…</p></div>
+<div class="error-msg" id="errorMsg"></div>
+
+<header>
+  <div class="logo">Nord<span>Väder</span></div>
+  <div class="search-wrap">
+    <input type="text" id="searchInput" placeholder="Sök stad i Norden…" autocomplete="off"/>
+    <button class="search-btn" onclick="doSearch()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" width="16" height="16"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    </button>
+    <div id="autocomplete"></div>
+  </div>
+  <button class="gps-btn" onclick="gpsLocate()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7" stroke-dasharray="2,2"/></svg>
+    Min plats
+  </button>
+  <div class="quick-cities">
+    <div class="qc" onclick="loadCity('Stockholm',59.33,18.07)">Stockholm</div>
+    <div class="qc" onclick="loadCity('Oslo',59.91,10.75)">Oslo</div>
+    <div class="qc" onclick="loadCity('Helsingfors',60.17,24.94)">Helsingfors</div>
+    <div class="qc" onclick="loadCity('Köpenhamn',55.68,12.57)">Köpenhamn</div>
+    <div class="qc" onclick="loadCity('Reykjavik',64.13,-21.82)">Reykjavik</div>
+    <div class="qc" onclick="loadCity('Göteborg',57.71,11.97)">Göteborg</div>
+    <div class="qc" onclick="loadCity('Malmö',55.60,13.00)">Malmö</div>
+    <div class="qc" onclick="loadCity('Bergen',60.39,5.33)">Bergen</div>
+    <div class="qc" onclick="loadCity('Tromsø',69.65,18.96)">Tromsø</div>
+    <div class="qc" onclick="loadCity('Åre',63.40,13.08)">Åre</div>
+    <div class="qc" onclick="loadCity('Kiruna',67.86,20.23)">Kiruna</div>
+    <div class="qc" onclick="loadCity('Oulu',65.01,25.47)">Oulu</div>
+  </div>
+</header>
+
+<main id="mainGrid">
+  <div id="emptyState" class="span2">
+    <div class="es-icon">⛅</div>
+    <h2>Välkommen till NordVäder</h2>
+    <p>Sök efter en stad eller klicka "Min plats" för att se aktuellt väder</p>
+  </div>
+</main>
+
+<script>
+// ── STATE ──
+let currentLat=null,currentLon=null,currentCity='';
+let radarMap=null,playing=false,playTimer=null,radarIdx=0;
+let precipChart=null,apparentChart=null;
+let acTimer=null,acResults=[];
+let rvMode='radar';
+
+// ── WMO CODES ──
+const WMO={
+  0:['☀️','Klart'],1:['🌤️','Mestadels klart'],2:['⛅','Delvis molnigt'],3:['☁️','Mulet'],
+  45:['🌫️','Dimma'],48:['🌫️','Rimfrostdimma'],
+  51:['🌦️','Lätt duggregn'],53:['🌦️','Duggregn'],55:['🌧️','Kraftigt duggregn'],
+  56:['🌨️','Lätt underkylt duggregn'],57:['🌨️','Underkylt duggregn'],
+  61:['🌧️','Lätt regn'],63:['🌧️','Regn'],65:['🌧️','Kraftigt regn'],
+  66:['🌨️','Underkylt lätt regn'],67:['🌨️','Underkylt regn'],
+  71:['❄️','Lätt snöfall'],73:['❄️','Snöfall'],75:['❄️','Kraftigt snöfall'],77:['🌨️','Snöhagel'],
+  80:['🌦️','Lätt regnskur'],81:['🌧️','Regnskurar'],82:['⛈️','Kraftiga regnskurar'],
+  85:['🌨️','Lätt snöskur'],86:['🌨️','Kraftig snöskur'],
+  95:['⛈️','Åska'],96:['⛈️','Åska med hagel'],99:['⛈️','Svår åska med hagel'],
+};
+function wmoInfo(c){return WMO[c]||['🌡️',`Kod ${c}`]}
+
+// ── HELPERS ──
+function windDirText(d){return['N','NNO','NO','ONO','O','OSO','SO','SSO','S','SSV','SV','VSV','V','VNV','NV','NNV'][Math.round(d/22.5)%16]}
+function beaufort(ms){if(ms<.3)return 0;if(ms<1.6)return 1;if(ms<3.4)return 2;if(ms<5.5)return 3;if(ms<8)return 4;if(ms<10.8)return 5;if(ms<13.9)return 6;if(ms<17.2)return 7;if(ms<20.8)return 8;if(ms<24.5)return 9;if(ms<28.5)return 10;if(ms<32.6)return 11;return 12}
+function beaufortDesc(ms){return['Vindstilla','Nästan vindstilla','Svag vind','Lätt bris','Måttlig bris','Frisk bris','Hård vind','Styv vind','Kuling','Stark kuling','Hård storm','Häftig storm','Orkan'][beaufort(ms)]}
+function uvCat(uv){if(uv<=2)return'Lågt';if(uv<=5)return'Måttligt';if(uv<=7)return'Högt';if(uv<=10)return'Mycket högt';return'Extremt'}
+function formatDate(d){return d.toLocaleDateString('sv-SE',{weekday:'long',day:'numeric',month:'long'})}
+function el(tag,props={}){const e=document.createElement(tag);Object.assign(e,props);return e}
+function showLoading(s){document.getElementById('loading').classList.toggle('hidden',!s)}
+function showError(m){const e=document.getElementById('errorMsg');e.textContent=m;e.classList.add('show');setTimeout(()=>e.classList.remove('show'),4000)}
+function dayOfYear(d){return Math.floor((d-new Date(d.getFullYear(),0,0))/86400000)}
+
+// ── CAPE ASSESSMENT ──
+function assessCAPE(cape,wmoCode){
+  const thunder=[95,96,99].includes(wmoCode);
+  let level=0,label='',color='';
+  if(thunder){
+    if(cape>2500){level=100;label='Extrem åska';color='#ff2020'}
+    else if(cape>1000){level=80;label='Kraftig åska';color='#ff6020'}
+    else{level=60;label='Åska';color='#ffaa20'}
+  } else {
+    if(cape>2500){level=70;label='Hög åskerisk';color='#ff6020'}
+    else if(cape>1000){level=45;label='Viss åskerisk';color='#ffd020'}
+    else if(cape>300){level=20;label='Låg åskerisk';color='#8ade60'}
+  }
+  return{level,label,color,isThunder:thunder||cape>1000}
+}
+
+// ── API CALLS ──
+async function fetchWeather(lat,lon){
+  const url=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`
+    +`&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,`
+    +`wind_speed_10m,wind_direction_10m,wind_gusts_10m,surface_pressure,visibility,`
+    +`uv_index,precipitation,cape,snow_depth,soil_moisture_0_to_1cm`
+    +`&hourly=temperature_2m,apparent_temperature,precipitation,weather_code,`
+    +`wind_speed_10m,cape,lightning_potential,snowfall,rain,showers,snow_depth,`
+    +`precipitation_probability`
+    +`&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,`
+    +`sunrise,sunset,uv_index_max,precipitation_probability_max,snowfall_sum,`
+    +`et0_fao_evapotranspiration`
+    +`&wind_speed_unit=ms&timezone=auto&forecast_days=7`;
+  const r=await fetch(url);
+  if(!r.ok) throw new Error('Väderdata ej tillgänglig');
+  return r.json();
+}
+
+async function fetchAuroraData(){
+  try{
+    const r=await fetch('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json');
+    const j=await r.json();
+    const rows=j.slice(1).filter(r=>r[1]!==null);
+    return rows.map(r=>({time:r[0],kp:parseFloat(r[1])}));
+  }catch{return null}
+}
+
+async function fetchMarine(lat,lon){
+  try{
+    const url=`https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}`
+      +`&current=wave_height,wave_direction,wave_period,wind_wave_height,swell_wave_height`
+      +`&hourly=wave_height&timezone=auto`;
+    const r=await fetch(url);
+    return r.ok?await r.json():null;
+  }catch{return null}
+}
+
+// ── SOLAR CALCULATIONS ──
+function getSolarCondition(lat,doy){
+  const decRad=-23.45*Math.cos(2*Math.PI/365*(doy+10))*Math.PI/180;
+  const latRad=lat*Math.PI/180;
+  const cosH=-Math.tan(latRad)*Math.tan(decRad);
+  if(cosH>1)return'polar_night';
+  if(cosH<-1)return'midnight_sun';
+  return'normal';
+}
+
+function daysUntilSolarEvent(lat,targetEvent){
+  const now=new Date();
+  for(let i=1;i<=366;i++){
+    const d=new Date(now.getTime()+i*86400000);
+    const condition=getSolarCondition(lat,dayOfYear(d));
+    if(condition===targetEvent)return i;
+  }
+  return null;
+}
+
+function currentSolarEventDuration(lat){
+  const now=new Date();
+  const cur=getSolarCondition(lat,dayOfYear(now));
+  if(cur==='normal')return 0;
+  let days=0;
+  for(let i=0;i<366;i++){
+    const d=new Date(now.getTime()-i*86400000);
+    if(getSolarCondition(lat,dayOfYear(d))!==cur)break;
+    days++;
+  }
+  return days;
+}
+
+// ── POLLEN MODEL (Nordic seasonal estimate) ──
+function estimatePollen(lat,month,temp){
+  // Simplified Nordic pollen calendar with latitude offset
+  const latOffset=Math.max(0,(lat-58)/10); // ~1 month later per 10° north
+  const m=month+latOffset;
+  const warm=temp>8;
+
+  function lvl(peak,spread,m){
+    const diff=Math.abs(m-peak);
+    if(diff>spread)return 0;
+    const v=Math.max(0,1-(diff/spread));
+    return Math.round(v*4);
+  }
+  return{
+    hassel: lvl(2,1.5,m)*(warm?1:0),
+    al:     lvl(3,1.5,m)*(warm?1:0),
+    bjork:  lvl(4.5,1.5,m)*(temp>10?1:0),
+    gras:   lvl(7,2.5,m)*(temp>12?1:0),
+    grabo:  lvl(8.5,2,m)*(temp>12?1:0),
+  };
+}
+
+function pollenLabel(v){return['Ingen','Låg','Måttlig','Hög','Mycket hög'][v]||'Ingen'}
+function pollenColor(v){return['var(--green)','#a8d870','var(--gold)','var(--storm2)','var(--storm)'][v]||'var(--green)'}
+function pollenClass(v){return['pollen-none','pollen-low','pollen-mod','pollen-high','pollen-vhigh'][v]||'pollen-none'}
+
+// ── FIRE RISK ──
+function calcFireRisk(temp,humidity,wind,rainToday){
+  if(rainToday>3)return{score:0,label:'Ingen risk',color:'var(--green)'};
+  let s=0;
+  s+=Math.max(0,(temp-10)/25*35);
+  s+=Math.max(0,(100-humidity)/70*35);
+  s+=Math.min(20,wind/15*20);
+  if(rainToday===0)s+=10;
+  const score=Math.min(100,Math.round(s));
+  const label=score<20?'Ingen risk':score<40?'Låg risk':score<60?'Måttlig risk':score<80?'Hög risk':'Extrem risk';
+  const color=score<20?'var(--green)':score<40?'#a8d870':score<60?'var(--gold)':score<80?'var(--storm2)':'var(--storm)';
+  return{score,label,color};
+}
+
+// ── ROAD CONDITIONS ──
+function calcRoadConditions(temp,prec,wind,wmoCode){
+  const snow=[71,73,75,77,85,86].includes(wmoCode);
+  const rain=[51,53,55,61,63,65,80,81,82].includes(wmoCode);
+  if(temp<-5&&(prec>0||snow))return{icon:'🧊',label:'Halt underlag',sub:'Pakad snö/is – kör försiktigt',color:'#ff8080',items:[{l:'Halkrisk',v:'Mycket hög'},{l:'Sikt',v:'Reducerad'},{l:'Rekommendation',v:'Vinterdäck krävs'}]};
+  if(temp<0&&prec>0)return{icon:'❄️',label:'Is/snö',sub:'Isiga förhållanden möjliga',color:'#ffd0d0',items:[{l:'Halkrisk',v:'Hög'},{l:'Snödjup',v:`${prec.toFixed(1)} mm`},{l:'Rekommendation',v:'Vinterdäck'}]};
+  if(temp<2&&temp>=0&&rain)return{icon:'🌧️',label:'Slask & blöt is',sub:'Frysrisk nära noll',color:'var(--gold)',items:[{l:'Halkrisk',v:'Måttlig'},{l:'Temperatur',v:`${temp.toFixed(1)}°C`},{l:'Rekommendation',v:'Var försiktig'}]};
+  if(temp>=0&&temp<5&&prec===0)return{icon:'🌬️',label:'Risk för svart is',sub:'Kall och torr väg – möjlig svart is',color:'var(--gold)',items:[{l:'Halkrisk',v:'Viss risk'},{l:'Temperatur',v:`${temp.toFixed(1)}°C`},{l:'Vind',v:`${wind.toFixed(0)} m/s`}]};
+  if(rain)return{icon:'🌧️',label:'Blött väglag',sub:'Reducerad friktion – öka avstånd',color:'var(--accent)',items:[{l:'Halkrisk',v:'Låg'},{l:'Sikt',v:'Normal'},{l:'Rekommendation',v:'Öka bromssträcka'}]};
+  return{icon:'✅',label:'Bra väglag',sub:'Torr och fri väg',color:'var(--green)',items:[{l:'Halkrisk',v:'Ingen'},{l:'Sikt',v:'God'},{l:'Rekommendation',v:'Normalkörning'}]};
+}
+
+// ── AURORA VISIBILITY ──
+function auroraVisibility(kp,lat,cloudCover){
+  const minLat=[66,65,63,60,58,55,52,48,44,40];
+  const visibleFromIdx=minLat.findIndex(l=>lat>=l);
+  const effKP=visibleFromIdx>=0?visibleFromIdx:0;
+  let prob=0;
+  if(kp>effKP){
+    prob=Math.min(100,Math.round(((kp-effKP)/2)*100));
+    prob=Math.round(prob*(1-(cloudCover||50)/150));
+  }
+  const label=prob<15?'Osannolik':prob<40?'Möjlig':prob<70?'Trolig':'Mycket trolig';
+  const color=prob<15?'var(--muted)':prob<40?'#a8d870':prob<70?'var(--gold)':'#7df0ff';
+  return{prob,label,color};
+}
+
+// ── MAIN LOAD ──
+async function loadCity(name,lat,lon){
+  currentLat=lat;currentLon=lon;currentCity=name;
+  showLoading(true);
+  try{
+    const[data,aurora,marine]=await Promise.all([
+      fetchWeather(lat,lon),
+      fetchAuroraData(),
+      fetchMarine(lat,lon)
+    ]);
+    renderAll(data,name,lat,lon,aurora,marine);
+  }catch(e){showError('Kunde inte hämta väderdata: '+e.message)}
+  finally{showLoading(false)}
+}
+
+// ── RENDER ALL ──
+function renderAll(data,name,lat,lon,auroraData,marineData){
+  const main=document.getElementById('mainGrid');
+  main.innerHTML='';
+  const c=data.current,daily=data.daily,hourly=data.hourly;
+  const[icon,desc]=wmoInfo(c.weather_code);
+  const cape=c.cape||0;
+  const stormInfo=assessCAPE(cape,c.weather_code);
+  const now=new Date();
+  const month=now.getMonth()+1; // 1-12
+  const doy=dayOfYear(now);
+  const precipitation=c.precipitation||0;
+  const snowDepth=c.snow_depth||0;
+  const soilMoisture=c.soil_moisture_0_to_1cm||0;
+
+  // ── HERO ──
+  const heroCard=el('div',{id:'heroCard',className:'card span2'});
+  heroCard.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px">
+      <div>
+        <div class="hero-location">📍 ${name}</div>
+        <div class="hero-time">${formatDate(now)} · ${now.toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit',hour12:false})}</div>
+      </div>
+    </div>
+    <div class="hero-main">
+      <div class="hero-icon">${icon}</div>
+      <div>
+        <div class="hero-temp">${Math.round(c.temperature_2m)}°</div>
+        <div class="hero-desc">${desc}</div>
+        <div class="hero-feels">Känns som ${Math.round(c.apparent_temperature)}°C</div>
+      </div>
+    </div>
+    <div class="hero-stats">
+      <div class="stat-box"><div class="stat-label">💧 Luftfuktighet</div><div class="stat-value">${c.relative_humidity_2m}%</div></div>
+      <div class="stat-box"><div class="stat-label">💨 Vind</div><div class="stat-value">${Math.round(c.wind_speed_10m)} m/s</div><div class="stat-sub">${windDirText(c.wind_direction_10m)} · kast ${Math.round(c.wind_gusts_10m)} m/s</div></div>
+      <div class="stat-box"><div class="stat-label">🔵 Lufttryck</div><div class="stat-value">${Math.round(c.surface_pressure)} hPa</div></div>
+      <div class="stat-box"><div class="stat-label">🌧️ Nederbörd</div><div class="stat-value">${precipitation} mm</div></div>
+      <div class="stat-box"><div class="stat-label">👁️ Sikt</div><div class="stat-value">${c.visibility>=1000?(c.visibility/1000).toFixed(1)+' km':c.visibility+' m'}</div></div>
+      <div class="stat-box"><div class="stat-label">☀️ UV-index</div><div class="stat-value">${c.uv_index}</div><div class="stat-sub">${uvCat(c.uv_index)}</div></div>
+    </div>`;
+  main.appendChild(heroCard);
+
+  // ── THUNDER ALERT ──
+  const thunderCard=el('div',{id:'thunderAlert',className:'card span2'});
+  if(stormInfo.isThunder||stormInfo.level>10){
+    thunderCard.style.display='block';
+    const ac=stormInfo.level>=80?'alert-extreme':stormInfo.level>=60?'alert-high':stormInfo.level>=30?'alert-mod':'alert-low';
+    thunderCard.className=`card span2 ${ac}`;
+    thunderCard.innerHTML=`<div class="thunder-inner">
+      <div class="thunder-icon">${stormInfo.level>=60?'⛈️':'🌩️'}</div>
+      <div class="thunder-text"><h3>${stormInfo.label}</h3><p>CAPE: ${Math.round(cape)} J/kg</p>
+      <div class="lightning-bar"><div class="lightning-fill" style="width:${stormInfo.level}%"></div></div></div>
+      <div class="thunder-level"><div class="thunder-level-val" style="color:${stormInfo.color}">${stormInfo.level}%</div><div class="thunder-level-label">RISKPOÄNG</div></div>
+    </div>`;
+  }
+  main.appendChild(thunderCard);
+
+  // ── QUICK ROW: PARAPLY + VÄGLAG + MIDNATTSSOL ──
+  const quickRow=el('div',{className:'quick-row'});
+
+  // PARAPLY
+  const nextProbs=hourly.precipitation_probability?hourly.precipitation_probability.slice(0,6):[];
+  const maxProb=nextProbs.length?Math.max(...nextProbs):0;
+  const umbrellaYes=maxProb>=40||precipitation>0;
+  const pCard=el('div',{className:'card'});
+  pCard.innerHTML=`<div class="card-title">🌂 Ska jag ta paraply?</div>
+    <div class="umbrella-answer ${umbrellaYes?'umbrella-yes':'umbrella-no'}">${umbrellaYes?'JA':'NEJ'}</div>
+    <div class="umbrella-reason">${umbrellaYes?`${maxProb}% sannolikhet de närmaste 6h`:'Ingen nederbörd planerad de närmaste 6h'}</div>
+    <div style="margin-top:14px">
+      ${nextProbs.map((p,i)=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="font-size:.75rem;color:var(--muted);width:36px">${i}h</span>
+        <div style="flex:1;height:6px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden">
+          <div style="width:${p}%;height:100%;background:${p>=60?'var(--storm2)':p>=30?'var(--gold)':'var(--accent)'};border-radius:3px"></div>
+        </div>
+        <span style="font-size:.75rem;color:var(--muted);width:30px">${p}%</span>
+      </div>`).join('')}
+    </div>`;
+  quickRow.appendChild(pCard);
+
+  // VÄGLAG
+  const road=calcRoadConditions(c.temperature_2m,precipitation,c.wind_speed_10m,c.weather_code);
+  const rCard=el('div',{className:'card'});
+  rCard.innerHTML=`<div class="card-title">🛣️ Väglag</div>
+    <div class="road-status">
+      <div class="road-icon">${road.icon}</div>
+      <div>
+        <div class="road-label" style="color:${road.color}">${road.label}</div>
+        <div class="road-sub">${road.sub}</div>
+      </div>
+    </div>
+    <div class="road-items">${road.items.map(i=>`<div class="road-item"><span class="ri-label">${i.l}</span><span class="ri-val">${i.v}</span></div>`).join('')}</div>`;
+  quickRow.appendChild(rCard);
+
+  // MIDNATTSSOL / POLARNATT
+  const solar=getSolarCondition(lat,doy);
+  const msCard=el('div',{className:'card'});
+  let msHTML='';
+  if(solar==='midnight_sun'){
+    const dur=currentSolarEventDuration(lat);
+    const untilEnd=daysUntilSolarEvent(lat,'normal');
+    msHTML=`<div class="sun-event-display">
+      <div class="sun-event-icon">🌞</div>
+      <div class="sun-event-title" style="color:var(--gold)">Midnattssol pågår!</div>
+      <div class="sun-event-desc">Solen går aldrig ned här just nu</div>
+    </div>
+    <div class="sun-countdown">
+      <div class="countdown-val">${dur}</div>
+      <div class="countdown-label">Dagar med midnattssol</div>
+      ${untilEnd?`<div style="margin-top:8px;font-size:.8rem;color:var(--muted)">${untilEnd} dagar till nästa solnedgång</div>`:''}
+    </div>`;
+  } else if(solar==='polar_night'){
+    const dur=currentSolarEventDuration(lat);
+    const untilEnd=daysUntilSolarEvent(lat,'normal');
+    msHTML=`<div class="sun-event-display">
+      <div class="sun-event-icon">🌑</div>
+      <div class="sun-event-title" style="color:var(--muted)">Polarnatt pågår</div>
+      <div class="sun-event-desc">Solen stiger inte över horisonten</div>
+    </div>
+    <div class="sun-countdown">
+      <div class="countdown-val" style="color:var(--muted)">${dur}</div>
+      <div class="countdown-label">Dagar med polarnatt</div>
+      ${untilEnd?`<div style="margin-top:8px;font-size:.8rem;color:var(--muted)">${untilEnd} dagar till nästa soluppgång</div>`:''}
+    </div>`;
+  } else {
+    const toMSun=lat>60?daysUntilSolarEvent(lat,'midnight_sun'):null;
+    const toPNight=lat>60?daysUntilSolarEvent(lat,'polar_night'):null;
+    const rise=new Date(daily.sunrise[0]);
+    const set_=new Date(daily.sunset[0]);
+    const dayLen=((set_-rise)/3600000).toFixed(1);
+    const sunPct=Math.min(100,Math.max(0,((Date.now()-rise)/(set_-rise))*100));
+    msHTML=`<div class="card-title" style="margin-bottom:8px">🌅 Sol & Dagsljus</div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+      <div><div style="font-size:.72rem;color:var(--muted)">Soluppgång</div><div style="font-size:1.2rem;font-weight:700">${rise.toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit',hour12:false})}</div></div>
+      <div style="text-align:center"><div style="font-size:.72rem;color:var(--muted)">Dagsljus</div><div style="font-size:1.2rem;font-weight:700;color:var(--gold)">${dayLen}h</div></div>
+      <div style="text-align:right"><div style="font-size:.72rem;color:var(--muted)">Solnedgång</div><div style="font-size:1.2rem;font-weight:700">${set_.toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit',hour12:false})}</div></div>
+    </div>
+    <div class="sun-bar"><div class="sun-needle" style="left:${sunPct}%"></div></div>
+    ${toMSun?`<div style="margin-top:12px;font-size:.82rem;color:var(--muted)">🌞 Midnattssol om <strong style="color:var(--gold)">${toMSun} dagar</strong></div>`:''}
+    ${toPNight?`<div style="margin-top:4px;font-size:.82rem;color:var(--muted)">🌑 Polarnatt om <strong style="color:var(--muted)">${toPNight} dagar</strong></div>`:''}`;
+  }
+  msCard.innerHTML=`<div class="card-title">☀️ Midnattssol & Polarnatt</div>${msHTML}`;
+  quickRow.appendChild(msCard);
+  main.appendChild(quickRow);
+
+  // ── HOURLY ──
+  const hourlyCard=el('div',{id:'hourlyCard',className:'card span2'});
+  hourlyCard.innerHTML=`<div class="card-title">🕐 Timsvis – 24 timmar</div><div class="hourly-scroll" id="hourlyScroll"></div>`;
+  main.appendChild(hourlyCard);
+  renderHourly(hourly);
+
+  // ── RADAR + PRECIP CHART ──
+  const radarCard=el('div',{id:'radarCard',className:'card'});
+  radarCard.innerHTML=`
+    <div class="card-title" style="justify-content:space-between">
+      <span>🌐 Nederbördsradar</span>
+      <span class="radar-status live" id="radarStatus"><div class="dot-blink"></div> Live</span>
+    </div>
+    <div id="radarMap"></div>
+    <div class="radar-controls">
+      <button class="radar-btn active" id="rBtnRadar" onclick="switchRVMode('radar')">🌧️ Radar</button>
+      <button class="radar-btn" id="rBtnSat" onclick="switchRVMode('satellite')">🛰️ Satellit</button>
+      <button class="radar-btn" id="rBtnWind" onclick="switchRVMode('wind')">💨 Vind</button>
+      <button id="playBtn" onclick="openWindy()" title="Öppna Windy i helskärm">⛶ Helskärm</button>
+      <span id="radarTime">Nedbördsradar</span>
+    </div>
+    <div class="radar-legend"><span>Svag</span><div class="legend-bar"></div><span>Kraftig</span></div>`;
+  main.appendChild(radarCard);
+
+  const precipCard=el('div',{className:'card'});
+  precipCard.innerHTML=`<div class="card-title">📊 Nederbördsdiagram – 24h</div><div class="chart-wrap"><canvas id="precipChart"></canvas></div>`;
+  main.appendChild(precipCard);
+
+  // ── 7-DAY + WIND COMPASS ──
+  const forecastCard=el('div',{className:'card'});
+  forecastCard.innerHTML=`<div class="card-title">📅 7-dagarsprognos</div><div id="forecastList"></div>`;
+  main.appendChild(forecastCard);
+
+  const windCard=el('div',{className:'card'});
+  windCard.innerHTML=`
+    <div class="card-title">💨 Vindkompass</div>
+    <div class="compass-wrap">
+      <div class="compass"><div class="compass-ring">
+        <div class="compass-dir n">N</div><div class="compass-dir s">S</div>
+        <div class="compass-dir e">O</div><div class="compass-dir w">V</div>
+        <div class="compass-needle" id="compassNeedle"></div>
+        <div class="compass-center"></div>
+      </div></div>
+      <div class="wind-stats">
+        <div class="wind-speed-big">${Math.round(c.wind_speed_10m)}</div>
+        <div class="wind-unit">m/s · ${windDirText(c.wind_direction_10m)}</div>
+        <div class="wind-gust">Vindkast ${Math.round(c.wind_gusts_10m)} m/s</div>
+      </div>
+    </div>
+    <div class="mini-grid" style="margin-top:14px">
+      <div class="mini-stat"><div class="ms-label">Beaufort</div><div class="ms-val">${beaufort(c.wind_speed_10m)}</div><div class="ms-sub">${beaufortDesc(c.wind_speed_10m)}</div></div>
+      <div class="mini-stat"><div class="ms-label">Riktning</div><div class="ms-val">${c.wind_direction_10m}°</div><div class="ms-sub">${windDirText(c.wind_direction_10m)}</div></div>
+    </div>`;
+  main.appendChild(windCard);
+
+  // ── NORRSKEN (AURORA) ──
+  const latestKP=auroraData&&auroraData.length?auroraData[auroraData.length-1].kp:0;
+  const cloudCover=50; // approximation
+  const aurora=auroraVisibility(latestKP,lat,cloudCover);
+  const auroraCard=el('div',{className:'card'});
+  const kpBars=auroraData?auroraData.slice(-9).map((d,i)=>{
+    const kp=Math.min(9,d.kp);
+    const h=Math.max(4,Math.round(kp/9*46));
+    const col=kp<3?'var(--green)':kp<5?'var(--gold)':kp<7?'var(--storm2)':'var(--storm)';
+    return`<div class="kp-bar" style="height:${h}px;background:${col};opacity:${i===8?1:.5+i*.06}"></div>`;
+  }).join(''):'';
+  const kpLbls=auroraData?auroraData.slice(-9).map(d=>`<div class="kp-label">${d.kp.toFixed(1)}</div>`).join(''):'';
+  auroraCard.innerHTML=`
+    <div class="card-title">🌌 Norrskens­prognos</div>
+    <div class="kp-meter">${kpBars}</div>
+    <div class="kp-labels">${kpLbls}</div>
+    <div style="text-align:center;font-size:.72rem;color:var(--muted);margin-bottom:8px">KP-index (senaste 3h)</div>
+    <div class="aurora-prob" style="color:${aurora.color}">${aurora.prob}%</div>
+    <div class="aurora-status">Synlighets­sannolikhet (${aurora.label})</div>
+    <div class="mini-grid" style="margin-top:12px">
+      <div class="mini-stat"><div class="ms-label">KP-index nu</div><div class="ms-val" style="color:${aurora.color}">${latestKP.toFixed(1)}</div><div class="ms-sub">av max 9</div></div>
+      <div class="mini-stat"><div class="ms-label">Latitud</div><div class="ms-val">${lat.toFixed(1)}°N</div><div class="ms-sub">${lat>66?'Arktisk':lat>62?'Subarktisk':lat>58?'Nordisk':'Mellannordisk'}</div></div>
+    </div>
+    <div class="aurora-tip">💡 Bäst chans: klara nätter, mörkt, bort från stadsljus. KP≥3 krävs för ${lat.toFixed(0)}°N.</div>`;
+  main.appendChild(auroraCard);
+
+  // ── SJÖVÄDER (MARINE) ──
+  const marineCard=el('div',{className:'card'});
+  if(marineData&&marineData.current){
+    const mc=marineData.current;
+    const wh=mc.wave_height||0;
+    const wp=mc.wave_period||0;
+    const wd=mc.wave_direction||0;
+    const sh=mc.swell_wave_height||0;
+    const seaState=wh<0.1?'Spegelblank':wh<0.5?'Lätt krusning':wh<1.25?'Lätt sjö':wh<2.5?'Måttlig sjö':wh<4?'Grov sjö':wh<6?'Mycket grov sjö':'Extremt grov sjö';
+    const seaColor=wh<0.5?'var(--green)':wh<1.25?'#a8d870':wh<2.5?'var(--gold)':wh<4?'var(--storm2)':'var(--storm)';
+    const hourlyWH=marineData.hourly?.wave_height?.slice(0,12)||[];
+    const maxWH=Math.max(...hourlyWH,.1);
+    const waveBars=hourlyWH.map(h=>{const pct=Math.max(4,Math.round(h/maxWH*56));return`<div class="wave-bar" style="height:${pct}px"></div>`}).join('');
+    marineCard.innerHTML=`
+      <div class="card-title">🌊 Sjöväder</div>
+      <div style="text-align:center;font-size:2rem;font-weight:800;color:${seaColor}">${wh.toFixed(1)} m</div>
+      <div style="text-align:center;font-size:.85rem;color:var(--muted);margin-bottom:8px">${seaState}</div>
+      <div class="wave-visual">${waveBars}</div>
+      <div style="font-size:.72rem;color:var(--muted);margin-bottom:12px">Våghöjd nästa 12h</div>
+      <div class="marine-grid">
+        <div class="mg-item"><div class="mg-label">Vågperiod</div><div class="mg-val">${wp.toFixed(0)}s</div></div>
+        <div class="mg-item"><div class="mg-label">Riktning</div><div class="mg-val">${windDirText(wd)}</div></div>
+        <div class="mg-item"><div class="mg-label">Dyning</div><div class="mg-val">${sh.toFixed(1)} m</div></div>
+        <div class="mg-item"><div class="mg-label">Beaufort</div><div class="mg-val">${beaufort(c.wind_speed_10m)} Bf</div></div>
+      </div>`;
+  } else {
+    marineCard.innerHTML=`<div class="card-title">🌊 Sjöväder</div><div style="text-align:center;color:var(--muted);padding:30px 0">📍 Ingen havsdata för denna plats</div>`;
+  }
+  main.appendChild(marineCard);
+
+  // ── POLLEN ──
+  const pollen=estimatePollen(lat,month,c.temperature_2m);
+  const pollenCard=el('div',{className:'card'});
+  const pollenNames={hassel:'🌿 Hassel',al:'🌳 Al',bjork:'🌲 Björk',gras:'🌾 Gräs',grabo:'🍃 Gråbo'};
+  pollenCard.innerHTML=`
+    <div class="card-title">🌸 Pollenprognos</div>
+    <div style="font-size:.78rem;color:var(--muted);margin-bottom:12px">Uppskattad pollenhalt för ${name} – ${now.toLocaleDateString('sv-SE',{month:'long'})}</div>
+    <div class="pollen-items">
+      ${Object.entries(pollen).map(([k,v])=>`
+        <div class="pollen-item">
+          <span class="pollen-name">${pollenNames[k]||k}</span>
+          <div class="pollen-bar-wrap"><div class="pollen-fill" style="width:${v/4*100}%;background:${pollenColor(v)}"></div></div>
+          <span class="pollen-level ${pollenClass(v)}">${pollenLabel(v)}</span>
+        </div>`).join('')}
+    </div>
+    <div style="margin-top:12px;font-size:.75rem;color:var(--muted);border-top:1px solid var(--border);padding-top:10px">⚠️ Prognos baserad på säsong, temperatur och latitud. Kontrollera SMHI för exakta värden.</div>`;
+  main.appendChild(pollenCard);
+
+  // ── BRANDRISK ──
+  const fire=calcFireRisk(c.temperature_2m,c.relative_humidity_2m,c.wind_speed_10m,precipitation);
+  const fireCard=el('div',{className:'card'});
+  fireCard.innerHTML=`
+    <div class="card-title">🔥 Skogsbrandrisk</div>
+    <div class="fire-gauge">
+      <div class="fire-val" style="color:${fire.color}">${fire.score}</div>
+      <div class="fire-label">${fire.label}</div>
+    </div>
+    <div class="fire-bar"></div>
+    <div class="fire-needle-wrap"><div class="fire-needle" style="left:${fire.score}%"></div></div>
+    <div class="fire-factors">
+      <div class="ff-item"><span class="ff-label">🌡️ Temperatur</span><span>${c.temperature_2m.toFixed(1)}°C</span></div>
+      <div class="ff-item"><span class="ff-label">💧 Fuktighet</span><span>${c.relative_humidity_2m}%</span></div>
+      <div class="ff-item"><span class="ff-label">💨 Vind</span><span>${Math.round(c.wind_speed_10m)} m/s</span></div>
+      <div class="ff-item"><span class="ff-label">🌧️ Regn idag</span><span>${precipitation} mm</span></div>
+    </div>`;
+  main.appendChild(fireCard);
+
+  // ── SKIDVÄDER ──
+  const skiCard=el('div',{className:'card'});
+  const snowD=snowDepth*100; // m → cm
+  const freshSnow=daily.snowfall_sum?daily.snowfall_sum[0]:0;
+  const windChill=c.temperature_2m-0.627*(Math.sqrt(c.wind_speed_10m*3.6)-1)*(c.temperature_2m+40);
+  const skiScore=Math.min(5,Math.round(
+    (snowD>30?2:snowD>10?1:0)+
+    (c.temperature_2m<-2?2:c.temperature_2m<0?1:0)+
+    (c.wind_speed_10m<8?1:0)
+  ));
+  const skiLabels=['Ej möjligt','Dåligt','Acceptabelt','Ganska bra','Bra','Utmärkt'];
+  const skiColors=['var(--storm)','var(--storm2)','var(--gold)','#a8d870','var(--green)','#7df0ff'];
+  skiCard.innerHTML=`
+    <div class="card-title">🎿 Skidväder</div>
+    <div style="text-align:center;margin-bottom:4px">
+      <div style="font-size:.85rem;color:var(--muted)">Förhållanden</div>
+      <div style="font-size:1.3rem;font-weight:700;color:${skiColors[skiScore]}">${skiLabels[skiScore]}</div>
+      <div class="ski-rating">${[1,2,3,4,5].map(i=>`<div class="ski-star">${i<=skiScore?'⭐':'☆'}</div>`).join('')}</div>
+    </div>
+    <div class="ski-conditions">
+      <div class="ski-item"><div class="ski-label">Snödjup</div><div class="ski-val">${snowD.toFixed(0)} cm</div></div>
+      <div class="ski-item"><div class="ski-label">Nysnö</div><div class="ski-val">${freshSnow.toFixed(1)} cm</div></div>
+      <div class="ski-item"><div class="ski-label">Temp</div><div class="ski-val">${c.temperature_2m.toFixed(1)}°</div></div>
+      <div class="ski-item"><div class="ski-label">Vindkyla</div><div class="ski-val">${windChill.toFixed(1)}°</div></div>
+    </div>`;
+  main.appendChild(skiCard);
+
+  // ── UPPLEVD TEMPERATUR (24h) ──
+  const apparentCard=el('div',{id:'apparentCard',className:'card span2'});
+  apparentCard.innerHTML=`<div class="card-title">🌡️ Upplevd vs. Faktisk temperatur – 24h</div><div class="app-chart-wrap"><canvas id="apparentChart"></canvas></div>`;
+  main.appendChild(apparentCard);
+
+  // ── TORKHETSINDEX ──
+  const droughtCard=el('div',{className:'card'});
+  const soilPct=Math.round(soilMoisture*100);
+  const et0=daily.et0_fao_evapotranspiration?daily.et0_fao_evapotranspiration[0]:0;
+  const droughtLabel=soilPct<20?'Extremt torrt':soilPct<35?'Torrt':soilPct<50?'Ganska torrt':soilPct<65?'Normalt':soilPct<80?'Fuktigt':'Mycket fuktigt';
+  const droughtColor=soilPct<20?'var(--storm)':soilPct<35?'var(--storm2)':soilPct<50?'var(--gold)':soilPct<65?'var(--green)':'var(--accent)';
+  droughtCard.innerHTML=`
+    <div class="card-title">💧 Torkhets­index</div>
+    <div class="moisture-ring-wrap">
+      <svg width="120" height="120" viewBox="0 0 120 120" style="display:block;margin:0 auto">
+        <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="10"/>
+        <circle cx="60" cy="60" r="50" fill="none" stroke="${droughtColor}" stroke-width="10"
+          stroke-dasharray="${2*Math.PI*50}" stroke-dashoffset="${2*Math.PI*50*(1-soilPct/100)}"
+          stroke-linecap="round" transform="rotate(-90 60 60)" style="transition:stroke-dashoffset 1s ease"/>
+        <text x="60" y="65" text-anchor="middle" fill="${droughtColor}" font-size="22" font-weight="800">${soilPct}%</text>
+      </svg>
+      <div class="moisture-val" style="color:${droughtColor}">${droughtLabel}</div>
+    </div>
+    <div class="drought-facts">
+      <div class="df-item"><div class="df-label">Markfukt</div><div class="df-val">${soilMoisture.toFixed(3)} m³/m³</div></div>
+      <div class="df-item"><div class="df-label">Avdunstning</div><div class="df-val">${et0.toFixed(1)} mm/dag</div></div>
+    </div>`;
+  main.appendChild(droughtCard);
+
+  // ── STORM METER ──
+  const stormCard=el('div',{className:'card'});
+  stormCard.innerHTML=`
+    <div class="card-title">⚡ Stormintensitet</div>
+    ${renderStormGauge(stormInfo.level,stormInfo.color)}
+    <div class="mini-grid" style="margin-top:14px">
+      <div class="mini-stat"><div class="ms-label">CAPE</div><div class="ms-val">${Math.round(cape)}</div><div class="ms-sub">J/kg</div></div>
+      <div class="mini-stat"><div class="ms-label">Åskväderskod</div><div class="ms-val">${[95,96,99].includes(c.weather_code)?'⚡ Ja':'✓ Nej'}</div><div class="ms-sub">WMO ${c.weather_code}</div></div>
+    </div>`;
+  main.appendChild(stormCard);
+
+  // render delayed
+  setTimeout(()=>{
+    initRadar(lat,lon);
+    renderPrecipChart(hourly);
+    renderForecast(daily);
+    renderApparentChart(hourly);
+    setCompassNeedle(c.wind_direction_10m);
+  },100);
+}
+
+// ── RENDER FUNCTIONS ──
+function renderHourly(hourly){
+  const scroll=document.getElementById('hourlyScroll');
+  if(!scroll)return;
+  const now=new Date();
+  let si=0;
+  for(let i=0;i<hourly.time.length;i++){if(new Date(hourly.time[i])>=now){si=i;break}}
+  for(let i=si;i<Math.min(si+24,hourly.time.length);i++){
+    const t=new Date(hourly.time[i]);
+    const[icon]=wmoInfo(hourly.weather_code[i]);
+    const thunder=[95,96,99].includes(hourly.weather_code[i])||(hourly.lightning_potential&&hourly.lightning_potential[i]>30);
+    const div=document.createElement('div');
+    div.className='hourly-item'+(thunder?' thunder-hour':'');
+    const prec=hourly.precipitation[i];
+    div.innerHTML=`<div class="hi-time">${t.getHours().toString().padStart(2,'0')}:00</div>
+      <div class="hi-icon">${icon}</div><div class="hi-temp">${Math.round(hourly.temperature_2m[i])}°</div>
+      <div class="hi-prec">${prec>0?prec.toFixed(1)+' mm':'–'}</div>
+      <div class="hi-wind">${Math.round(hourly.wind_speed_10m[i])} m/s</div>`;
+    scroll.appendChild(div);
+  }
+}
+
+function renderPrecipChart(hourly){
+  const canvas=document.getElementById('precipChart');
+  if(!canvas)return;
+  if(precipChart){precipChart.destroy();precipChart=null}
+  const now=new Date();let si=0;
+  for(let i=0;i<hourly.time.length;i++){if(new Date(hourly.time[i])>=now){si=i;break}}
+  const labels=[],rainData=[],snowData=[],showerData=[];
+  for(let i=si;i<Math.min(si+24,hourly.time.length);i++){
+    labels.push(new Date(hourly.time[i]).getHours().toString().padStart(2,'0')+':00');
+    rainData.push(hourly.rain?hourly.rain[i]:0);
+    snowData.push(hourly.snowfall?hourly.snowfall[i]:0);
+    showerData.push(hourly.showers?hourly.showers[i]:0);
+  }
+  precipChart=new Chart(canvas,{type:'bar',data:{labels,datasets:[
+    {label:'Regn',data:rainData,backgroundColor:'rgba(58,155,213,.7)',borderRadius:4},
+    {label:'Snö',data:snowData,backgroundColor:'rgba(200,230,255,.7)',borderRadius:4},
+    {label:'Skurar',data:showerData,backgroundColor:'rgba(120,100,200,.6)',borderRadius:4},
+  ]},options:{responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{labels:{color:'#7da8c8',font:{size:11}}}},
+    scales:{
+      x:{stacked:true,ticks:{color:'#7da8c8',maxRotation:0},grid:{color:'rgba(58,155,213,.08)'}},
+      y:{stacked:true,ticks:{color:'#7da8c8'},grid:{color:'rgba(58,155,213,.08)'},title:{display:true,text:'mm',color:'#7da8c8'}}
+    }}});
+}
+
+function renderApparentChart(hourly){
+  const canvas=document.getElementById('apparentChart');
+  if(!canvas)return;
+  if(apparentChart){apparentChart.destroy();apparentChart=null}
+  const now=new Date();let si=0;
+  for(let i=0;i<hourly.time.length;i++){if(new Date(hourly.time[i])>=now){si=i;break}}
+  const labels=[],actual=[],apparent=[];
+  for(let i=si;i<Math.min(si+24,hourly.time.length);i++){
+    labels.push(new Date(hourly.time[i]).getHours().toString().padStart(2,'0')+':00');
+    actual.push(hourly.temperature_2m[i]);
+    apparent.push(hourly.apparent_temperature?hourly.apparent_temperature[i]:null);
+  }
+  apparentChart=new Chart(canvas,{type:'line',data:{labels,datasets:[
+    {label:'Faktisk temp',data:actual,borderColor:'#3a9bd5',backgroundColor:'rgba(58,155,213,.15)',fill:true,tension:.4,pointRadius:3,pointHoverRadius:6},
+    {label:'Upplevd temp',data:apparent,borderColor:'#f5c842',backgroundColor:'rgba(245,200,66,.1)',fill:true,tension:.4,pointRadius:3,pointHoverRadius:6,borderDash:[5,3]},
+  ]},options:{responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{labels:{color:'#7da8c8',font:{size:11}}},tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(1)}°C`}}},
+    scales:{
+      x:{ticks:{color:'#7da8c8',maxRotation:0},grid:{color:'rgba(58,155,213,.08)'}},
+      y:{ticks:{color:'#7da8c8',callback:v=>v+'°'},grid:{color:'rgba(58,155,213,.08)'},title:{display:true,text:'°C',color:'#7da8c8'}}
+    }}});
+}
+
+function renderForecast(daily){
+  const list=document.getElementById('forecastList');
+  if(!list)return;
+  const days=['Sön','Mån','Tis','Ons','Tor','Fre','Lör'];
+  const minT=Math.min(...daily.temperature_2m_min);
+  const maxT=Math.max(...daily.temperature_2m_max);
+  const range=maxT-minT||1;
+  for(let i=0;i<daily.time.length;i++){
+    const d=new Date(daily.time[i]);
+    const[icon,desc]=wmoInfo(daily.weather_code[i]);
+    const hi=Math.round(daily.temperature_2m_max[i]);
+    const lo=Math.round(daily.temperature_2m_min[i]);
+    const prec=daily.precipitation_sum[i];
+    const fw=((hi-minT)/range*100).toFixed(0);
+    const div=document.createElement('div');
+    div.className='forecast-item';
+    div.innerHTML=`<div class="fi-day">${i===0?'Idag':days[d.getDay()]}<br><span style="font-size:.72rem;opacity:.6">${d.toLocaleDateString('sv-SE',{day:'numeric',month:'short'})}</span></div>
+      <div class="fi-icon">${icon}</div>
+      <div style="flex:1"><div class="fi-desc">${desc}</div><div class="fi-bar"><div class="fi-bar-fill" style="width:${fw}%"></div></div></div>
+      <div class="fi-prec">${prec>0?prec.toFixed(1)+'mm':'–'}</div>
+      <div class="fi-temps"><div class="fi-high">${hi}°</div><div class="fi-low">${lo}°</div></div>`;
+    list.appendChild(div);
+  }
+}
+
+function renderStormGauge(level,color){
+  const ang=-135+(level/100*270);
+  const rad=ang*Math.PI/180;
+  const cx=80,cy=80,r=55;
+  const x=cx+r*Math.cos(rad),y=cy+r*Math.sin(rad);
+  return`<div style="text-align:center;padding:8px 0">
+    <svg width="160" height="110" viewBox="0 0 160 110">
+      <defs><linearGradient id="gg" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" style="stop-color:#3dd68c"/>
+        <stop offset="40%" style="stop-color:#f5c842"/>
+        <stop offset="70%" style="stop-color:#ff8c42"/>
+        <stop offset="100%" style="stop-color:#ff2020"/>
+      </linearGradient></defs>
+      <path d="M 17 93 A 55 55 0 0 1 143 93" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="12" stroke-linecap="round"/>
+      <path d="M 17 93 A 55 55 0 0 1 143 93" fill="none" stroke="url(#gg)" stroke-width="12" stroke-linecap="round" stroke-dasharray="173" stroke-dashoffset="${173*(1-level/100)}"/>
+      <line x1="80" y1="80" x2="${x}" y2="${y}" stroke="${color||'#7da8c8'}" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="80" cy="80" r="5" fill="${color||'#7da8c8'}"/>
+    </svg>
+    <div style="font-size:1.8rem;font-weight:800;color:${color||'var(--muted)'}">${level}%</div>
+  </div>`;
+}
+
+function setCompassNeedle(deg){
+  const n=document.getElementById('compassNeedle');
+  if(n)n.style.transform=`translateX(-50%) translateY(-100%) rotate(${deg}deg)`;
+}
+
+// ── RADAR (Windy embed) ──
+const WINDY_OVERLAYS={radar:'rain',satellite:'clouds',wind:'wind'};
+
+function initRadar(lat,lon){buildWindyIframe(lat,lon,rvMode)}
+
+function buildWindyIframe(lat,lon,mode){
+  const mapDiv=document.getElementById('radarMap');
+  if(!mapDiv)return;
+  const overlay=WINDY_OVERLAYS[mode]||'rain';
+  const src=`https://embed.windy.com/embed2.html?lat=${lat.toFixed(2)}&lon=${lon.toFixed(2)}`
+    +`&detailLat=${lat.toFixed(2)}&detailLon=${lon.toFixed(2)}`
+    +`&width=650&height=450&zoom=5&level=surface&overlay=${overlay}&product=ecmwf`
+    +`&menu=&message=true&marker=true&calendar=now&pressure=`
+    +`&type=map&location=coordinates&detail=&metricWind=m%2Fs&metricTemp=%C2%B0C&radarRange=-1`;
+  mapDiv.innerHTML=`<iframe src="${src}" allowfullscreen></iframe>`;
+  const rt=document.getElementById('radarTime');
+  if(rt)rt.textContent={radar:'Nedbördsradar',satellite:'Satellitbild',wind:'Vindkarta'}[mode]||'';
+}
+
+function switchRVMode(mode){
+  rvMode=mode;
+  document.querySelectorAll('.radar-btn').forEach(b=>b.classList.remove('active'));
+  const bm={radar:'rBtnRadar',satellite:'rBtnSat',wind:'rBtnWind'};
+  const btn=document.getElementById(bm[mode]);
+  if(btn)btn.classList.add('active');
+  buildWindyIframe(currentLat,currentLon,mode);
+}
+
+function openWindy(){
+  const overlay=WINDY_OVERLAYS[rvMode]||'rain';
+  window.open(`https://www.windy.com/?${overlay},${currentLat?.toFixed(2)},${currentLon?.toFixed(2)},5`,'_blank');
+}
+
+// ── SEARCH ──
+document.getElementById('searchInput').addEventListener('input',function(){
+  clearTimeout(acTimer);
+  const q=this.value.trim();
+  if(q.length<2){closeAC();return}
+  acTimer=setTimeout(()=>searchNominatim(q),350);
+});
+document.getElementById('searchInput').addEventListener('keydown',function(e){
+  if(e.key==='Enter')doSearch();
+  if(e.key==='Escape')closeAC();
+});
+
+async function searchNominatim(q){
+  try{
+    const r=await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&countrycodes=SE,NO,DK,FI,IS&limit=5&format=json&accept-language=sv`,{headers:{'Accept-Language':'sv'}});
+    acResults=await r.json();
+    showAC(acResults);
+  }catch{}
+}
+
+function showAC(results){
+  const ac=document.getElementById('autocomplete');
+  ac.innerHTML='';
+  if(!results.length){ac.style.display='none';return}
+  results.forEach(r=>{
+    const div=document.createElement('div');
+    div.className='ac-item';
+    div.textContent=r.display_name.split(',').slice(0,3).join(', ');
+    div.onclick=()=>{document.getElementById('searchInput').value=r.name;closeAC();loadCity(r.name,parseFloat(r.lat),parseFloat(r.lon))};
+    ac.appendChild(div);
+  });
+  ac.style.display='block';
+}
+
+function closeAC(){document.getElementById('autocomplete').style.display='none'}
+
+async function doSearch(){
+  const q=document.getElementById('searchInput').value.trim();
+  if(!q)return;
+  closeAC();
+  if(!acResults.length)await searchNominatim(q);
+  if(acResults.length){const r=acResults[0];loadCity(r.name,parseFloat(r.lat),parseFloat(r.lon))}
+}
+
+document.addEventListener('click',e=>{if(!e.target.closest('.search-wrap'))closeAC()});
+
+// ── GPS ──
+function gpsLocate(){
+  if(!navigator.geolocation){showError('Geolokalisering stöds ej');return}
+  showLoading(true);
+  navigator.geolocation.getCurrentPosition(async pos=>{
+    const{latitude:lat,longitude:lon}=pos.coords;
+    try{
+      const r=await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=sv`);
+      const j=await r.json();
+      loadCity(j.address.city||j.address.town||j.address.village||'Din plats',lat,lon);
+    }catch{loadCity('Din plats',lat,lon)}
+  },err=>{showLoading(false);showError('Plats ej tillgänglig: '+err.message)},{timeout:10000});
+}
+
+// ── INIT ──
+document.getElementById('loading').classList.add('hidden');
+loadCity('Stockholm',59.3293,18.0686);
+
+// ── SERVICE WORKER (PWA) ──
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('/sw.js').catch(()=>{});
+  });
+}
+</script>
+</body>
+</html>
