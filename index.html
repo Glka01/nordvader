@@ -449,11 +449,34 @@ async function fetchAuroraData(){
 async function fetchMarine(lat,lon){
   try{
     const url=`https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}`
-      +`&current=wave_height,wave_direction,wave_period,wind_wave_height,swell_wave_height`
-      +`&hourly=wave_height&timezone=auto`;
+      +`&current=wave_height,wave_direction,wave_period,wind_wave_height,swell_wave_height,sea_surface_temperature`
+      +`&hourly=wave_height,sea_surface_temperature&timezone=auto&forecast_days=7`;
     const r=await fetch(url);
     return r.ok?await r.json():null;
   }catch{return null}
+}
+
+// Uppskatta sjötemperatur baserat på lufttemperatur
+function estimateLakeTemp(hourlyTemps){
+  // Sjöar följer lufttemperaturen med ~2 veckors eftersläpning
+  // Använd medel av tillgängliga timmar som proxy
+  const temps=hourlyTemps||[];
+  if(!temps.length)return null;
+  const avg=temps.slice(0,72).reduce((a,b)=>a+b,0)/Math.min(72,temps.length);
+  // Sjöar är kallare än luften tidigt på säsongen, varmare sent
+  const month=new Date().getMonth()+1;
+  const offset=month<=6?-4:-1;
+  return Math.max(0,Math.min(28,avg+offset));
+}
+
+function swimRating(temp){
+  if(temp===null)return{emoji:'❓',label:'Okänd',color:'var(--muted)',desc:'Ingen data tillgänglig'};
+  if(temp<12)return{emoji:'🥶',label:'Iskallt',color:'#7dd3fc',desc:'Rekommenderas ej – risk för kylchock'};
+  if(temp<16)return{emoji:'😬',label:'Kallt',color:'#60a5fa',desc:'Bara för tuffa simmare'};
+  if(temp<18)return{emoji:'🙂',label:'Friskt',color:'#34d399',desc:'Fullt möjligt – typisk nordisk badsommar'};
+  if(temp<21)return{emoji:'😊',label:'Lagom',color:'var(--green)',desc:'Bra badtemperatur'};
+  if(temp<24)return{emoji:'😄',label:'Varmt',color:'var(--gold)',desc:'Perfekt för bad!'};
+  return{emoji:'🏖️',label:'Mycket varmt',color:'var(--storm2)',desc:'Lyxigt – ovanligt varmt för Norden'};
 }
 
 // ── SOLAR CALCULATIONS ──
@@ -919,6 +942,57 @@ function renderAll(data,name,lat,lon,auroraData,marineData){
       <div class="df-item"><div class="df-label">Avdunstning</div><div class="df-val">${et0.toFixed(1)} mm/dag</div></div>
     </div>`;
   main.appendChild(droughtCard);
+
+  // ── BADTEMPERATUR ──
+  const seaTemp=marineData?.current?.sea_surface_temperature??null;
+  const lakeTemp=estimateLakeTemp(hourly.temperature_2m);
+  const seaRating=swimRating(seaTemp);
+  const lakeRating=swimRating(lakeTemp);
+  const swimCard=el('div',{className:'card'});
+  // 7-dagars havstemp
+  const seaTemps7=marineData?.hourly?.sea_surface_temperature
+    ?[0,1,2,3,4,5,6].map(d=>{
+        const idx=d*24;
+        const slice=marineData.hourly.sea_surface_temperature.slice(idx,idx+24).filter(v=>v!=null);
+        return slice.length?+(slice.reduce((a,b)=>a+b,0)/slice.length).toFixed(1):null;
+      })
+    :[];
+  const dayNames=['Idag','Imor','Ons','Tor','Fre','Lör','Sön'].map((d,i)=>{
+    const dt=new Date();dt.setDate(dt.getDate()+i);
+    return i===0?'Idag':i===1?'Imor':['Sön','Mån','Tis','Ons','Tor','Fre','Lör'][dt.getDay()];
+  });
+  swimCard.innerHTML=`
+    <div class="card-title">🏊 Badtemperaturer</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
+      <div style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:14px;padding:16px;text-align:center">
+        <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">🌊 Havsvatten</div>
+        <div style="font-size:3rem">${seaRating.emoji}</div>
+        <div style="font-size:2rem;font-weight:800;color:${seaRating.color};margin:4px 0">${seaTemp!==null?seaTemp.toFixed(1)+'°':'–'}</div>
+        <div style="font-size:.85rem;font-weight:700;color:${seaRating.color}">${seaRating.label}</div>
+        <div style="font-size:.75rem;color:var(--muted);margin-top:4px">${seaRating.desc}</div>
+      </div>
+      <div style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:14px;padding:16px;text-align:center">
+        <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">🏞️ Insjö (est.)</div>
+        <div style="font-size:3rem">${lakeRating.emoji}</div>
+        <div style="font-size:2rem;font-weight:800;color:${lakeRating.color};margin:4px 0">${lakeTemp!==null?lakeTemp.toFixed(1)+'°':'–'}</div>
+        <div style="font-size:.85rem;font-weight:700;color:${lakeRating.color}">${lakeRating.label}</div>
+        <div style="font-size:.75rem;color:var(--muted);margin-top:4px">${lakeRating.desc}</div>
+      </div>
+    </div>
+    ${seaTemps7.length?`
+    <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">🌊 Havstemp 7 dagar</div>
+    <div style="display:flex;gap:6px">
+      ${seaTemps7.map((t,i)=>{
+        const r=swimRating(t);
+        return`<div style="flex:1;text-align:center;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:8px 4px">
+          <div style="font-size:.68rem;color:var(--muted)">${dayNames[i]}</div>
+          <div style="font-size:1rem;margin:3px 0">${r.emoji}</div>
+          <div style="font-size:.82rem;font-weight:700;color:${r.color}">${t!==null?t.toFixed(1)+'°':'–'}</div>
+        </div>`;
+      }).join('')}
+    </div>`:''}
+    <div style="margin-top:12px;font-size:.75rem;color:var(--muted);border-top:1px solid var(--border);padding-top:10px">⚠️ Insjötemp är uppskattad. Havstemp från Open-Meteo Marine API.</div>`;
+  main.appendChild(swimCard);
 
   // ── STORM METER ──
   const stormCard=el('div',{className:'card'});
