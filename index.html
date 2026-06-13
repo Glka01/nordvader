@@ -427,7 +427,7 @@ async function fetchWeather(lat,lon){
     +`uv_index,precipitation,cape,snow_depth,soil_moisture_0_to_1cm`
     +`&hourly=temperature_2m,apparent_temperature,precipitation,weather_code,`
     +`wind_speed_10m,cape,lightning_potential,snowfall,rain,showers,snow_depth,`
-    +`precipitation_probability`
+    +`precipitation_probability,lifted_index`
     +`&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,`
     +`sunrise,sunset,uv_index_max,precipitation_probability_max,snowfall_sum,`
     +`et0_fao_evapotranspiration`
@@ -757,6 +757,7 @@ function renderAll(data,name,lat,lon,auroraData,marineData){
       <button class="radar-btn active" id="rBtnRadar" onclick="switchRVMode('radar')">🌧️ Radar</button>
       <button class="radar-btn" id="rBtnSat" onclick="switchRVMode('satellite')">🛰️ Satellit</button>
       <button class="radar-btn" id="rBtnWind" onclick="switchRVMode('wind')">💨 Vind</button>
+      <button class="radar-btn" id="rBtnLightning" onclick="switchRVMode('lightning')">⚡ Blixtar</button>
       <button id="playBtn" onclick="openWindy()" title="Öppna Windy i helskärm">⛶ Helskärm</button>
       <span id="radarTime">Nedbördsradar</span>
     </div>
@@ -994,15 +995,51 @@ function renderAll(data,name,lat,lon,auroraData,marineData){
     <div style="margin-top:12px;font-size:.75rem;color:var(--muted);border-top:1px solid var(--border);padding-top:10px">⚠️ Insjötemp är uppskattad. Havstemp från Open-Meteo Marine API.</div>`;
   main.appendChild(swimCard);
 
-  // ── STORM METER ──
+  // ── STORM / BLIXT METER ──
+  // Hitta aktuell timme i hourly
+  let si0=0;
+  for(let i=0;i<hourly.time.length;i++){if(new Date(hourly.time[i])>=now){si0=i;break}}
+  const li=hourly.lifted_index?hourly.lifted_index[si0]:null;
+  const lp=hourly.lightning_potential?hourly.lightning_potential[si0]:0;
+  // Blixtfrekvens-estimat baserat på CAPE (blixtar/km²/h, förenklat)
+  const flashRate=cape>300?Math.max(0,+(Math.pow(cape/1000,1.73)*0.4).toFixed(2)):0;
+  const liLabel=li===null?'–':li>2?'Stabil':li>0?'Svagt instabil':li>-2?'Instabil':li>-6?'Mycket instabil':'Extrem instabilitet';
+  const liColor=li===null?'var(--muted)':li>2?'#3dd68c':li>0?'#8ade60':li>-2?'#ffd020':li>-6?'#ff8c42':'#ff2020';
+  // Nästa 12h: hur många timmar med åskväderskod eller hög LP?
+  const thunderHours=Array.from({length:12},(_,i)=>{
+    const idx=si0+i;
+    if(idx>=hourly.time.length)return false;
+    return [95,96,99].includes(hourly.weather_code[idx])||(hourly.lightning_potential[idx]>40);
+  });
+  const thunderCount=thunderHours.filter(Boolean).length;
   const stormCard=el('div',{className:'card'});
   stormCard.innerHTML=`
-    <div class="card-title">⚡ Stormintensitet</div>
+    <div class="card-title">⚡ Åska & Blixtnedslag</div>
     ${renderStormGauge(stormInfo.level,stormInfo.color)}
     <div class="mini-grid" style="margin-top:14px">
       <div class="mini-stat"><div class="ms-label">CAPE</div><div class="ms-val">${Math.round(cape)}</div><div class="ms-sub">J/kg</div></div>
-      <div class="mini-stat"><div class="ms-label">Åskväderskod</div><div class="ms-val">${[95,96,99].includes(c.weather_code)?'⚡ Ja':'✓ Nej'}</div><div class="ms-sub">WMO ${c.weather_code}</div></div>
-    </div>`;
+      <div class="mini-stat"><div class="ms-label">Lifted Index</div><div class="ms-val" style="color:${liColor};font-size:.85rem">${liLabel}</div><div class="ms-sub">${li!==null?li.toFixed(1):''}</div></div>
+      <div class="mini-stat"><div class="ms-label">Blixtpotential</div><div class="ms-val">${Math.round(lp)}%</div><div class="ms-sub">just nu</div></div>
+      <div class="mini-stat"><div class="ms-label">Est. blixtfrekvens</div><div class="ms-val">${flashRate>0?flashRate+'/h':'–'}</div><div class="ms-sub">blixtar/km²</div></div>
+    </div>
+    <div style="margin-top:14px;padding:12px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:12px">
+      <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">⚡ Blixtpotential – nästa 12 timmar</div>
+      <div style="display:flex;gap:4px;align-items:flex-end;height:50px">
+        ${Array.from({length:12},(_,i)=>{
+          const idx=si0+i;
+          if(idx>=hourly.time.length)return'';
+          const pct=Math.min(100,hourly.lightning_potential[idx]||0);
+          const hr=new Date(hourly.time[idx]).getHours().toString().padStart(2,'0');
+          const col=pct>60?'#ff4e2a':pct>30?'#ffd020':'#3a9bd5';
+          return`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px">
+            <div style="width:100%;background:${col};border-radius:3px 3px 0 0;height:${Math.max(2,pct*0.46)}px;opacity:.85"></div>
+            <div style="font-size:.6rem;color:var(--muted)">${hr}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+    ${thunderCount>0?`<div style="margin-top:12px;padding:10px 14px;background:rgba(255,78,42,.12);border:1px solid rgba(255,78,42,.3);border-radius:10px;font-size:.85rem;color:#ff8c42">⚠️ <strong>${thunderCount} av nästa 12 timmar</strong> har förhöjd åskarisk</div>`:''}
+    <div style="margin-top:10px;font-size:.75rem;color:var(--muted)">Tryck <strong>⚡ Blixtar</strong> i kartan för live-åskakarta från Windy</div>`;
   main.appendChild(stormCard);
 
   // render delayed
@@ -1138,7 +1175,7 @@ function setCompassNeedle(deg){
 }
 
 // ── RADAR (Windy embed) ──
-const WINDY_OVERLAYS={radar:'rain',satellite:'clouds',wind:'wind'};
+const WINDY_OVERLAYS={radar:'rain',satellite:'clouds',wind:'wind',lightning:'thunder'};
 
 function initRadar(lat,lon){buildWindyIframe(lat,lon,rvMode)}
 
@@ -1153,13 +1190,13 @@ function buildWindyIframe(lat,lon,mode){
     +`&type=map&location=coordinates&detail=&metricWind=m%2Fs&metricTemp=%C2%B0C&radarRange=-1`;
   mapDiv.innerHTML=`<iframe src="${src}" allowfullscreen></iframe>`;
   const rt=document.getElementById('radarTime');
-  if(rt)rt.textContent={radar:'Nedbördsradar',satellite:'Satellitbild',wind:'Vindkarta'}[mode]||'';
+  if(rt)rt.textContent={radar:'Nedbördsradar',satellite:'Satellitbild',wind:'Vindkarta',lightning:'Åska & Blixtar'}[mode]||'';
 }
 
 function switchRVMode(mode){
   rvMode=mode;
   document.querySelectorAll('.radar-btn').forEach(b=>b.classList.remove('active'));
-  const bm={radar:'rBtnRadar',satellite:'rBtnSat',wind:'rBtnWind'};
+  const bm={radar:'rBtnRadar',satellite:'rBtnSat',wind:'rBtnWind',lightning:'rBtnLightning'};
   const btn=document.getElementById(bm[mode]);
   if(btn)btn.classList.add('active');
   buildWindyIframe(currentLat,currentLon,mode);
