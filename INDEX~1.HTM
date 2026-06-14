@@ -1,0 +1,1928 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tesla Körjournal</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0d0d0d;--bg2:#161616;--bg3:#1f1f1f;--border:#2c2c2c;
+  --text:#ececec;--muted:#777;--accent:#e31937;--accent2:#c01530;
+  --green:#3ddc84;--blue:#4dabf7;--yellow:#ffd43b;--purple:#b794f4;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+
+/* ── HEADER ── */
+header{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;height:62px;position:sticky;top:0;z-index:100;gap:20px}
+.logo{font-size:18px;font-weight:700;color:var(--accent);letter-spacing:-.5px;display:flex;align-items:center;gap:10px;white-space:nowrap}
+.logo svg{width:28px;height:28px}
+nav{display:flex;gap:2px;margin-left:auto}
+nav button{background:none;border:none;color:var(--muted);padding:8px 14px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;transition:all .15s;display:flex;align-items:center;gap:6px}
+nav button:hover{background:var(--bg3);color:var(--text)}
+nav button.active{background:var(--bg3);color:var(--text)}
+.tesla-badge{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin-left:8px;padding:4px 10px;background:var(--bg3);border-radius:20px;border:1px solid var(--border)}
+.dot{width:7px;height:7px;border-radius:50%;background:#444}
+.dot.on{background:var(--green);box-shadow:0 0 6px var(--green)}
+
+/* ── LAYOUT ── */
+main{padding:24px;max-width:1200px;margin:0 auto}
+.view{display:none}
+.view.active{display:block}
+
+/* ── CARDS ── */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:22px}
+.card+.card{margin-top:16px}
+
+/* ── STATS ── */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:22px}
+.stat{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:20px}
+.stat-label{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:10px}
+.stat-val{font-size:30px;font-weight:700;line-height:1}
+.stat-sub{font-size:12px;color:var(--muted);margin-top:6px}
+.stat-bar{height:3px;background:var(--bg3);border-radius:2px;margin-top:10px}
+.stat-fill{height:100%;background:var(--accent);border-radius:2px}
+
+/* ── MAP ── */
+.map-box{height:380px;border-radius:12px;overflow:hidden;border:1px solid var(--border)}
+.map-sm{height:220px;border-radius:10px;overflow:hidden;border:1px solid var(--border);margin-top:12px}
+
+/* ── TABLE ── */
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{text-align:left;padding:11px 16px;color:var(--muted);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)}
+td{padding:13px 16px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tbody tr{cursor:pointer;transition:background .1s}
+tbody tr:hover td{background:var(--bg3)}
+
+/* ── BADGES ── */
+.badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:500}
+.badge-biz{background:rgba(77,171,247,.13);color:var(--blue)}
+.badge-priv{background:rgba(61,220,132,.13);color:var(--green)}
+
+/* ── BUTTONS ── */
+.btn{padding:9px 18px;border-radius:8px;border:none;cursor:pointer;font-size:13.5px;font-weight:500;transition:all .15s;display:inline-flex;align-items:center;gap:7px}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:var(--accent2)}
+.btn-sec{background:var(--bg3);color:var(--text);border:1px solid var(--border)}
+.btn-sec:hover{background:var(--border)}
+.btn-ghost{background:none;border:none;color:var(--muted);padding:6px 10px;cursor:pointer;border-radius:7px;font-size:13px;transition:all .15s}
+.btn-ghost:hover{color:var(--text);background:var(--bg3)}
+.btn-icon{width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:none;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.btn-icon:hover{background:var(--bg3);color:var(--text)}
+.btn-icon.del:hover{background:rgba(227,25,55,.1);color:var(--accent);border-color:var(--accent)}
+.btn-row{display:flex;gap:8px}
+
+/* ── FORM ── */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.fg{display:flex;flex-direction:column;gap:5px}
+.fg.full{grid-column:1/-1}
+label{font-size:12px;color:var(--muted);font-weight:500}
+input,select,textarea{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:9px 13px;color:var(--text);font-size:13.5px;outline:none;transition:border-color .15s;width:100%;font-family:inherit}
+input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+select option{background:var(--bg3)}
+textarea{resize:vertical;min-height:72px}
+
+/* ── AUTOCOMPLETE ── */
+.ac-wrap{position:relative}
+.ac-list{position:absolute;top:100%;left:0;right:0;background:var(--bg3);border:1px solid var(--border);border-radius:9px;z-index:50;max-height:180px;overflow-y:auto;margin-top:4px;display:none}
+.ac-list.open{display:block}
+.ac-item{padding:9px 13px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)}
+.ac-item:last-child{border-bottom:none}
+.ac-item:hover{background:var(--bg2)}
+
+/* ── SECTION HEADER ── */
+.sh{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.sh h2{font-size:19px;font-weight:600}
+
+/* ── FILTER BAR ── */
+.fbar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.fbar input,.fbar select{min-width:130px;flex:1}
+
+/* ── MODAL ── */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:200;display:none;align-items:center;justify-content:center}
+.overlay.open{display:flex}
+.modal{background:var(--bg2);border:1px solid var(--border);border-radius:16px;width:90%;max-width:680px;max-height:88vh;overflow-y:auto;padding:26px}
+.mh{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px}
+.mh h3{font-size:17px;font-weight:600}
+
+/* ── TOAST ── */
+#toast{position:fixed;bottom:24px;right:24px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px 20px;font-size:13.5px;z-index:500;transform:translateY(80px);opacity:0;transition:all .3s}
+#toast.show{transform:translateY(0);opacity:1}
+#toast.ok{border-color:var(--green)}
+#toast.err{border-color:var(--accent)}
+
+/* ── TESLA PANEL ── */
+.ts-status{display:flex;align-items:center;gap:14px;padding:14px 18px;background:var(--bg3);border-radius:10px;margin-bottom:18px;font-size:13.5px}
+.ts-vehicle{background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:16px;display:flex;align-items:center;gap:16px;margin-bottom:10px}
+.ts-vehicle-icon{font-size:32px}
+.ts-vehicle-info h4{font-size:14px;font-weight:600}
+.ts-vehicle-info p{font-size:12px;color:var(--muted);margin-top:3px}
+.ts-vehicle-status{margin-left:auto;text-align:right}
+.ts-vehicle-status .km{font-size:16px;font-weight:600}
+.ts-vehicle-status .soc{font-size:12px;color:var(--green)}
+
+/* ── IMPORT ITEM ── */
+.imp-item{display:flex;align-items:center;gap:12px;padding:13px;background:var(--bg3);border-radius:10px;margin-bottom:8px;border:1px solid transparent;transition:border-color .15s}
+.imp-item.checked{border-color:var(--accent)}
+.imp-item input[type=checkbox]{width:17px;height:17px;cursor:pointer;accent-color:var(--accent)}
+.imp-info{flex:1}
+.imp-title{font-size:13.5px;font-weight:500}
+.imp-sub{font-size:12px;color:var(--muted);margin-top:2px}
+
+/* ── TABS ── */
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:20px}
+.tab{padding:10px 18px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:13.5px;font-weight:500;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+/* ── EMPTY STATE ── */
+.empty{text-align:center;padding:56px 20px;color:var(--muted)}
+.empty .icon{font-size:44px;margin-bottom:14px}
+.empty h3{color:var(--text);margin-bottom:8px;font-size:16px}
+.empty p{font-size:13.5px}
+
+/* ── CHART ── */
+.monthly-chart{display:flex;align-items:flex-end;gap:6px;height:100px;padding:0 4px}
+.mc-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end}
+.mc-bar{width:100%;border-radius:3px 3px 0 0;min-height:3px}
+.mc-bar.biz{background:var(--blue)}
+.mc-bar.priv{background:var(--green)}
+.mc-lbl{font-size:9.5px;color:var(--muted)}
+
+/* ── DETAIL VIEW ── */
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px}
+.drow{background:var(--bg3);border-radius:10px;padding:13px}
+.drow-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
+.drow-val{font-size:14px;font-weight:500}
+
+/* ── INFO BOX ── */
+.info-box{background:rgba(77,171,247,.07);border:1px solid rgba(77,171,247,.2);border-radius:10px;padding:14px;font-size:13px;color:#93c5fd;line-height:1.6}
+.warn-box{background:rgba(255,212,59,.07);border:1px solid rgba(255,212,59,.2);border-radius:10px;padding:14px;font-size:13px;color:var(--yellow);line-height:1.6}
+
+.gap-16{gap:16px}
+.flex{display:flex}
+.flex-col{flex-direction:column}
+.mb-16{margin-bottom:16px}
+.mb-24{margin-bottom:24px}
+.mt-16{margin-top:16px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.text-muted{color:var(--muted);font-size:13px}
+
+@media(max-width:700px){
+  .form-grid,.grid-2,.detail-grid{grid-template-columns:1fr}
+  .fg.full{grid-column:1}
+  nav button span{display:none}
+  main{padding:16px}
+}
+
+/* ── MOBILE ── */
+@media(max-width:600px){
+  header{padding:0 12px;height:54px;gap:10px}
+  .logo span{display:none}
+  nav button{padding:6px 10px;font-size:12px}
+  main{padding:12px}
+  .stats{grid-template-columns:1fr 1fr}
+  .stat{padding:14px}
+  .stat-val{font-size:22px}
+  .form-grid,.grid-2,.detail-grid{grid-template-columns:1fr}
+  .sh{flex-direction:column;align-items:flex-start;gap:10px}
+}
+
+/* ── AUTOLOG ── */
+.autolog-panel{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:16px}
+.autolog-status{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.autolog-dot{width:12px;height:12px;border-radius:50%;background:#444;flex-shrink:0}
+.autolog-dot.active{background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 2s infinite}
+.autolog-dot.driving{background:var(--yellow);box-shadow:0 0 8px var(--yellow);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.autolog-info{flex:1}
+.autolog-title{font-weight:600;font-size:15px}
+.autolog-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.autolog-trips{margin-top:12px;max-height:300px;overflow-y:auto}
+.autolog-trip-item{background:var(--bg3);border-radius:8px;padding:12px;margin-bottom:8px;border-left:3px solid var(--green)}
+.autolog-trip-item.pending{border-left-color:var(--yellow)}
+
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <svg viewBox="0 0 342 512" fill="currentColor"><path d="M0 38.4l171 31.9L342 38.4C315.9 17.5 260.4 0 171 0S26.1 17.5 0 38.4zm342 38.4L171 108.7 0 76.8C0 76.8 0 512 171 512s171-435.2 171-435.2z"/></svg>
+    Körjournal
+  </div>
+  <nav>
+    <button class="active" onclick="nav('overview')" id="nav-overview">📊 <span>Översikt</span></button>
+    <button onclick="nav('trips')" id="nav-trips">🗺️ <span>Resor</span></button>
+    <button onclick="nav('add')" id="nav-add">➕ <span>Ny resa</span></button>
+    <button onclick="nav('tesla')" id="nav-tesla">⚡ <span>Tesla API</span></button>
+    <button onclick="nav('export')" id="nav-export">📥 <span>Exportera</span></button>
+  </nav>
+  <div class="tesla-badge">
+    <div class="dot" id="header-dot"></div>
+    <span id="header-status">Ej ansluten</span>
+  </div>
+</header>
+
+<main>
+
+<!-- ══════════════ ÖVERSIKT ══════════════ -->
+<div class="view active" id="view-overview">
+  <div class="stats" id="stats-grid"></div>
+  <div class="grid-2 mb-24">
+    <div class="card">
+      <div class="sh"><h2>Senaste resor</h2><button class="btn-ghost" onclick="nav('trips')">Visa alla →</button></div>
+      <div id="recent-list"></div>
+    </div>
+    <div class="card">
+      <div class="sh"><h2>Per månad (km)</h2></div>
+      <div class="monthly-chart" id="monthly-chart"></div>
+      <div class="flex mt-16" style="gap:16px;font-size:12px">
+        <span><span style="color:var(--blue)">■</span> Tjänst</span>
+        <span><span style="color:var(--green)">■</span> Privat</span>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="sh"><h2>Alla resor på karta</h2></div>
+    <div class="map-box" id="overview-map"></div>
+  </div>
+</div>
+
+<!-- ══════════════ RESOR ══════════════ -->
+<div class="view" id="view-trips">
+  <div class="sh">
+    <h2>Körjournal</h2>
+    <button class="btn btn-primary" onclick="nav('add')">➕ Ny resa</button>
+  </div>
+  <div class="fbar">
+    <input type="text" placeholder="🔍 Sök adress, anteckning..." id="search-q" oninput="renderTrips()">
+    <select id="filter-purpose" onchange="renderTrips()">
+      <option value="">Alla syften</option>
+      <option value="tjänst">Tjänst</option>
+      <option value="privat">Privat</option>
+    </select>
+    <input type="month" id="filter-month" onchange="renderTrips()">
+    <button class="btn btn-sec" onclick="clearFilters()">Rensa</button>
+  </div>
+  <div class="card" style="padding:0">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Datum</th>
+            <th>Från</th>
+            <th>Till</th>
+            <th>Km</th>
+            <th>kWh</th>
+            <th>Syfte</th>
+            <th>Anteckning</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="trips-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+  <div id="trips-empty" class="empty" style="display:none">
+    <div class="icon">🚗</div>
+    <h3>Inga resor ännu</h3>
+    <p>Lägg till din första resa eller anslut Tesla API för att importera.</p>
+  </div>
+</div>
+
+<!-- ══════════════ NY RESA / REDIGERA ══════════════ -->
+<div class="view" id="view-add">
+  <div class="sh"><h2 id="form-title">Ny resa</h2></div>
+  <div class="grid-2">
+    <div class="card">
+      <form id="trip-form" onsubmit="submitTrip(event)">
+        <input type="hidden" id="edit-id">
+        <div class="form-grid">
+          <div class="fg">
+            <label>Datum</label>
+            <input type="date" id="f-date" required>
+          </div>
+          <div class="fg">
+            <label>Fordon</label>
+            <input type="text" id="f-vehicle" placeholder="t.ex. Tesla Model 3">
+          </div>
+          <div class="fg">
+            <label>Starttid</label>
+            <input type="time" id="f-start-time">
+          </div>
+          <div class="fg">
+            <label>Sluttid</label>
+            <input type="time" id="f-end-time">
+          </div>
+          <div class="fg full">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+              <label style="margin:0">Startadress</label>
+              <button type="button" class="btn-ghost" style="font-size:11px;padding:2px 6px" onclick="addFav('start')">⭐ Spara</button>
+            </div>
+            <div class="ac-wrap">
+              <input type="text" id="f-start-addr" placeholder="Sök adress..." autocomplete="off" oninput="geocodeInput('start')" required>
+              <div class="ac-list" id="ac-start"></div>
+            </div>
+            <input type="hidden" id="f-start-lat">
+            <input type="hidden" id="f-start-lng">
+            <div id="fav-chips-start" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px"></div>
+          </div>
+          <div class="fg full">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+              <label style="margin:0">Slutadress</label>
+              <button type="button" class="btn-ghost" style="font-size:11px;padding:2px 6px" onclick="addFav('end')">⭐ Spara</button>
+            </div>
+            <div class="ac-wrap">
+              <input type="text" id="f-end-addr" placeholder="Sök adress..." autocomplete="off" oninput="geocodeInput('end')" required>
+              <div class="ac-list" id="ac-end"></div>
+            </div>
+            <input type="hidden" id="f-end-lat">
+            <input type="hidden" id="f-end-lng">
+            <div id="fav-chips-end" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px"></div>
+          </div>
+          <div class="fg">
+            <label>Avstånd (km)</label>
+            <input type="number" id="f-km" step="0.1" min="0" placeholder="Beräknas automatiskt">
+          </div>
+          <div class="fg">
+            <label>Energi (kWh)</label>
+            <input type="number" id="f-kwh" step="0.1" min="0" placeholder="Valfritt">
+          </div>
+          <div class="fg">
+            <label>Syfte</label>
+            <select id="f-purpose" required>
+              <option value="">Välj syfte...</option>
+              <option value="tjänst">Tjänst</option>
+              <option value="privat">Privat</option>
+            </select>
+          </div>
+          <div class="fg">
+            <label>Passagerare</label>
+            <input type="text" id="f-passengers" placeholder="Namn (valfritt)">
+          </div>
+          <div class="fg full">
+            <label>Anteckning</label>
+            <textarea id="f-note" placeholder="Ärende, kund, mötesreferens..."></textarea>
+          </div>
+        </div>
+        <div class="flex mt-16 gap-16" style="gap:10px">
+          <button type="submit" class="btn btn-primary">💾 Spara resa</button>
+          <button type="button" class="btn btn-sec" onclick="resetForm()">Rensa</button>
+        </div>
+      </form>
+    </div>
+    <div>
+      <div class="card">
+        <div class="sh" style="margin-bottom:10px"><h2>Karta</h2><span class="text-muted" id="form-route-info"></span></div>
+        <div class="map-sm" id="form-map"></div>
+      </div>
+      <div class="card mt-16">
+        <h3 style="margin-bottom:10px;font-size:14px">💡 Tips</h3>
+        <p class="text-muted">Skriv en adress så beräknas koordinater automatiskt via OpenStreetMap. Kartan uppdateras och avstånd beräknas via vägval.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ TESLA API ══════════════ -->
+<div class="view" id="view-tesla">
+  <div class="sh"><h2>Tesla Fleet API</h2></div>
+
+  <div class="ts-status">
+    <div class="dot" id="ts-dot"></div>
+    <div style="flex:1">
+      <div id="ts-status-text" style="font-weight:500">Ej ansluten</div>
+      <div id="ts-status-sub" class="text-muted" style="font-size:12px;margin-top:2px"></div>
+    </div>
+    <button class="btn btn-sec" onclick="tsDisconnect()" id="ts-disconnect-btn" style="display:none">Koppla från</button>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="tsTab('connect')">Anslut</button>
+    <button class="tab" onclick="tsTab('vehicles')">Fordon</button>
+    <button class="tab" onclick="tsTab('import')">Importera</button>
+    <button class="tab" onclick="tsTab('help')">Hjälp</button>
+  </div>
+
+  <!-- Connect tab -->
+  <div id="ts-tab-connect">
+
+    <!-- Steg 1 -->
+    <div class="card mb-16">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <div style="width:28px;height:28px;background:var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0">1</div>
+        <h3>Logga in med Tesla</h3>
+      </div>
+      <div class="form-grid mb-16">
+        <div class="fg">
+          <label>Client ID</label>
+          <input type="text" id="ts-client-id" value="f73412dd-70ae-49db-a09e-054dc3e20e75">
+        </div>
+        <div class="fg">
+          <label>Region</label>
+          <select id="ts-region">
+            <option value="eu">Europa (eu)</option>
+            <option value="na">Nordamerika (na)</option>
+            <option value="fe">Asien/Stilla havet (fe)</option>
+          </select>
+        </div>
+        <div class="fg full">
+          <label>Redirect URI <span style="font-weight:400;color:var(--muted)">(samma som registrerat hos Tesla)</span></label>
+          <input type="text" id="ts-redirect-uri" placeholder="https://din-app.netlify.app/callback.html" value="">
+        </div>
+        <div class="fg full">
+          <label>Client Secret <span style="font-weight:400;color:var(--muted)">(från developer.tesla.com)</span></label>
+          <input type="password" id="ts-client-secret" placeholder="Klistra in din Client Secret...">
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="tsOAuthLogin()">🔑 Öppna Tesla-inloggning</button>
+    </div>
+
+    <!-- Anslut med token (fallback) -->
+    <div class="card mb-16" style="margin-top:8px">
+      <button class="btn btn-sec" onclick="tsConnectManual()">⚡ Anslut med token manuellt</button>
+    </div>
+  </div>
+
+  <!-- Vehicles tab -->
+  <div id="ts-tab-vehicles" style="display:none">
+    <div id="ts-vehicles-list">
+      <div class="empty"><div class="icon">🚗</div><h3>Anslut Tesla API</h3><p>Gå till fliken "Anslut" för att länka ditt konto.</p></div>
+    </div>
+  </div>
+
+  <!-- Import tab -->
+  <div id="ts-tab-import" style="display:none">
+
+    <!-- AUTO LOG PANEL -->
+    <div class="autolog-panel">
+      <div class="autolog-status">
+        <div class="autolog-dot" id="al-dot"></div>
+        <div class="autolog-info">
+          <div class="autolog-title" id="al-title">Autologgning inaktiv</div>
+          <div class="autolog-sub" id="al-sub">Startar automatisk resinspelning</div>
+        </div>
+        <button class="btn btn-primary" id="al-btn" onclick="autoLogToggle()" style="white-space:nowrap">▶ Starta</button>
+      </div>
+      <div id="al-trips-list"></div>
+    </div>
+
+    <!-- MANUAL FETCH -->
+    <div class="sh" style="margin-bottom:14px">
+      <h3>Hämta fordonsdata manuellt</h3>
+      <button class="btn btn-sec" onclick="tsFetchVehicleData()" id="ts-fetch-btn">🔄 Hämta fordonsdata</button>
+    </div>
+    <div class="warn-box mb-16">
+      Hämtar aktuell position och odometer från din Tesla. Använd "Starta resa härifrån" för att automatiskt fylla i startadressen i resformuläret.
+    </div>
+    <div id="ts-vehicle-data-panel">
+      <div class="empty"><div class="icon">🚗</div><h3>Tryck "Hämta fordonsdata"</h3><p>Hämtar aktuell position och körsträcka från din Tesla.</p></div>
+    </div>
+  </div>
+
+  <!-- Help tab -->
+  <div id="ts-tab-help" style="display:none">
+    <div class="card mb-16">
+      <h3 style="margin-bottom:12px">Python-skript för att hämta token</h3>
+      <p class="text-muted mb-16">Kör detta i terminal om du inte har en app:</p>
+      <pre style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:14px;font-size:12px;overflow-x:auto;line-height:1.6;color:#93c5fd">pip install tesla-fleet-api
+
+python3 - &lt;&lt;'EOF'
+from tesla_fleet_api.teslafleetapi import TeslaFleetApi
+import asyncio
+
+async def main():
+    api = TeslaFleetApi(
+        client_id="YOUR_CLIENT_ID",
+        client_secret="YOUR_CLIENT_SECRET",
+    )
+    # Följ OAuth-flödet i konsolen
+    print(await api.vehicles())
+
+asyncio.run(main())
+EOF</pre>
+    </div>
+    <div class="card mb-16">
+      <h3 style="margin-bottom:12px">CORS-problem?</h3>
+      <p class="text-muted" style="line-height:1.7">Om du öppnar appen som en lokal fil (file://) kan webbläsaren blockera API-anrop p.g.a. CORS-restriktioner. Lösningar:<br><br>
+      <strong>1.</strong> Servera filen lokalt: <code style="background:var(--bg3);padding:2px 6px;border-radius:4px">python3 -m http.server 8080</code> och öppna <code style="background:var(--bg3);padding:2px 6px;border-radius:4px">http://localhost:8080</code><br><br>
+      <strong>2.</strong> Använd Chrome med CORS inaktiverat (ej rekommenderat för daglig användning)<br><br>
+      <strong>3.</strong> Importera via JSON-fil (se nedan)</p>
+    </div>
+    <div class="card">
+      <h3 style="margin-bottom:12px">Importera via JSON-fil</h3>
+      <p class="text-muted mb-16">Exportera resor från TeslaFi, Teslascope eller eget skript som JSON och importera här:</p>
+      <input type="file" id="json-import-file" accept=".json" style="margin-bottom:12px">
+      <button class="btn btn-sec" onclick="importJSON()">📂 Importera JSON</button>
+      <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+        <p class="text-muted mb-16">Importera från CSV (t.ex. exporterad från denna app):</p>
+        <input type="file" id="csv-import-file" accept=".csv" style="margin-bottom:12px">
+        <button class="btn btn-sec" onclick="importCSV()">📂 Importera CSV</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ EXPORTERA ══════════════ -->
+<div class="view" id="view-export">
+  <div class="sh"><h2>Exportera körjournal</h2></div>
+  <div class="grid-2">
+    <div class="card">
+      <h3 style="margin-bottom:16px">Filter</h3>
+      <div class="form-grid">
+        <div class="fg">
+          <label>Från datum</label>
+          <input type="date" id="exp-from">
+        </div>
+        <div class="fg">
+          <label>Till datum</label>
+          <input type="date" id="exp-to">
+        </div>
+        <div class="fg full">
+          <label>Syfte</label>
+          <select id="exp-purpose">
+            <option value="">Alla</option>
+            <option value="tjänst">Tjänst</option>
+            <option value="privat">Privat</option>
+          </select>
+        </div>
+      </div>
+      <div class="stat mt-16" style="margin-top:16px">
+        <div class="stat-label">Resor att exportera</div>
+        <div class="stat-val" id="exp-count">0</div>
+        <div class="stat-sub" id="exp-km">0 km totalt</div>
+      </div>
+    </div>
+    <div class="card">
+      <h3 style="margin-bottom:16px">Format</h3>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <button class="btn btn-primary" onclick="exportExcel()" style="justify-content:center;padding:14px">
+          📊 Exportera Excel (.xlsx)
+        </button>
+        <button class="btn btn-sec" onclick="exportPDF()" style="justify-content:center;padding:14px">
+          📄 Exportera PDF
+        </button>
+        <button class="btn btn-sec" onclick="exportCSV()" style="justify-content:center;padding:14px">
+          📋 Exportera CSV
+        </button>
+      </div>
+      <div class="info-box mt-16" style="margin-top:16px">
+        Excel-filen innehåller formaterad tabell med summering. PDF-filen är lämplig för Skatteverket och arbetsgivare.
+      </div>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<!-- ══════════════ DETAIL MODAL ══════════════ -->
+<div class="overlay" id="detail-overlay" onclick="closeDetail(event)">
+  <div class="modal">
+    <div class="mh">
+      <h3 id="detail-title">Resedetaljer</h3>
+      <div class="btn-row">
+        <button class="btn btn-sec" onclick="editTrip(currentDetailId)">✏️ Redigera</button>
+        <button class="btn-ghost" onclick="closeDetailModal()">✕</button>
+      </div>
+    </div>
+    <div class="detail-grid" id="detail-grid"></div>
+    <div class="map-sm" id="detail-map"></div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════
+// DATA
+// ══════════════════════════════════════════
+const LS_KEY = 'tesla_korjournal_v1';
+const LS_TOKEN = 'tesla_api_token';
+const LS_REGION = 'tesla_api_region';
+
+function getTrips() {
+  try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); } catch(e) { return []; }
+}
+function saveTrips(trips) {
+  localStorage.setItem(LS_KEY, JSON.stringify(trips));
+}
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+
+// ══════════════════════════════════════════
+// NAV
+// ══════════════════════════════════════════
+let currentView = 'overview';
+function nav(view) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('view-' + view).classList.add('active');
+  document.getElementById('nav-' + view).classList.add('active');
+  currentView = view;
+  if (view === 'overview') renderOverview();
+  if (view === 'trips') renderTrips();
+  if (view === 'add') { resetForm(); setTimeout(() => { initFormMap(); renderFavChips(); }, 100); }
+  if (view === 'export') renderExportPreview();
+}
+
+// ══════════════════════════════════════════
+// TOAST
+// ══════════════════════════════════════════
+function toast(msg, type='ok') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show ' + type;
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.className = '', 3000);
+}
+
+// ══════════════════════════════════════════
+// OVERVIEW
+// ══════════════════════════════════════════
+let overviewMap = null;
+function renderOverview() {
+  const trips = getTrips();
+  const bizKm = trips.filter(t=>t.purpose==='tjänst').reduce((s,t)=>s+(+t.km||0),0);
+  const privKm = trips.filter(t=>t.purpose==='privat').reduce((s,t)=>s+(+t.km||0),0);
+  const totalKm = bizKm + privKm;
+  const totalKwh = trips.reduce((s,t)=>s+(+t.kwh||0),0);
+  const pct = totalKm>0 ? Math.round(bizKm/totalKm*100) : 0;
+
+  const now = new Date();
+  const thisMonth = now.toISOString().slice(0,7);
+  const thisYear = now.getFullYear().toString();
+  const monthTrips = trips.filter(t => t.date.startsWith(thisMonth));
+  const yearTrips = trips.filter(t => t.date.startsWith(thisYear));
+  const monthKm = monthTrips.reduce((s,t)=>s+(+t.km||0),0);
+  const yearKm = yearTrips.reduce((s,t)=>s+(+t.km||0),0);
+  const yearBizKm = yearTrips.filter(t=>t.purpose==='tjänst').reduce((s,t)=>s+(+t.km||0),0);
+  const skatteavdrag = Math.round(yearBizKm * 0.25);
+  document.getElementById('stats-grid').innerHTML = `
+    <div class="stat">
+      <div class="stat-label">Totalt resor</div>
+      <div class="stat-val">${trips.length}</div>
+      <div class="stat-sub">${trips.filter(t=>t.purpose==='tjänst').length} tjänst · ${trips.filter(t=>t.purpose==='privat').length} privat</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Denna månad</div>
+      <div class="stat-val">${fmtKm(monthKm)}</div>
+      <div class="stat-sub">${monthTrips.length} resor · ${fmtKm(monthTrips.filter(t=>t.purpose==='tjänst').reduce((s,t)=>s+(+t.km||0),0))} km tjänst</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">I år (${thisYear})</div>
+      <div class="stat-val">${fmtKm(yearKm)}</div>
+      <div class="stat-sub">${fmtKm(yearBizKm)} tjänst · ${pct}% tjänsteandel</div>
+      <div class="stat-bar"><div class="stat-fill" style="width:${pct}%"></div></div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Skatteunderlag ${thisYear}</div>
+      <div class="stat-val" style="color:var(--blue)">${skatteavdrag} kr</div>
+      <div class="stat-sub">${fmtKm(yearBizKm)} km × 0,25 kr/km</div>
+    </div>
+  `;
+
+  // Recent trips
+  const recent = [...trips].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
+  document.getElementById('recent-list').innerHTML = recent.length ? recent.map(t => `
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+      <span class="badge ${t.purpose==='tjänst'?'badge-biz':'badge-priv'}">${t.purpose}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.startAddr} → ${t.endAddr}</div>
+        <div style="font-size:12px;color:var(--muted)">${fmtDate(t.date)}</div>
+      </div>
+      <div style="font-size:13.5px;font-weight:600">${fmtKm(t.km)} km</div>
+    </div>
+  `).join('') : '<div class="text-muted" style="padding:20px 0">Inga resor ännu.</div>';
+
+  // Monthly chart
+  const months = {};
+  trips.forEach(t => {
+    const m = t.date.slice(0,7);
+    if (!months[m]) months[m] = {biz:0, priv:0};
+    if (t.purpose==='tjänst') months[m].biz += +t.km||0;
+    else months[m].priv += +t.km||0;
+  });
+  const sortedM = Object.keys(months).sort().slice(-6);
+  const maxM = Math.max(...sortedM.map(m=>months[m].biz+months[m].priv), 1);
+  document.getElementById('monthly-chart').innerHTML = sortedM.length ? sortedM.map(m => {
+    const bizH = Math.round((months[m].biz/maxM)*96);
+    const privH = Math.round((months[m].priv/maxM)*96);
+    const lbl = m.slice(5,7)+'/'+m.slice(2,4);
+    return `<div class="mc-col">
+      <div class="mc-bar biz" style="height:${bizH}px"></div>
+      <div class="mc-bar priv" style="height:${privH}px"></div>
+      <div class="mc-lbl">${lbl}</div>
+    </div>`;
+  }).join('') : '<div class="text-muted" style="padding:20px">Ingen data</div>';
+
+  // Map
+  setTimeout(() => {
+    if (!overviewMap) {
+      overviewMap = L.map('overview-map').setView([59.33, 18.06], 6);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:19}).addTo(overviewMap);
+    } else {
+      overviewMap.eachLayer(l => { if (l instanceof L.Marker || l instanceof L.Polyline) overviewMap.removeLayer(l); });
+    }
+    trips.forEach(t => {
+      if (t.startLat && t.startLng) {
+        L.circleMarker([+t.startLat,+t.startLng],{radius:5,color:t.purpose==='tjänst'?'#4dabf7':'#3ddc84',fillOpacity:.8}).addTo(overviewMap).bindPopup(`<b>${t.startAddr}</b><br>${fmtDate(t.date)} · ${fmtKm(t.km)} km`);
+      }
+      if (t.endLat && t.endLng) {
+        L.circleMarker([+t.endLat,+t.endLng],{radius:5,color:'#e31937',fillOpacity:.8}).addTo(overviewMap);
+      }
+    });
+    overviewMap.invalidateSize();
+  }, 100);
+}
+
+function fmtKm(v) { return (+v||0).toFixed(1).replace('.',','); }
+function fmtDate(d) {
+  if (!d) return '';
+  const [y,m,day] = d.split('-');
+  return `${day}/${m}/${y}`;
+}
+
+// ══════════════════════════════════════════
+// TRIPS LIST
+// ══════════════════════════════════════════
+function renderTrips() {
+  let trips = getTrips();
+  const q = (document.getElementById('search-q').value||'').toLowerCase();
+  const pur = document.getElementById('filter-purpose').value;
+  const month = document.getElementById('filter-month').value;
+
+  if (q) trips = trips.filter(t => (t.startAddr+t.endAddr+t.note).toLowerCase().includes(q));
+  if (pur) trips = trips.filter(t => t.purpose === pur);
+  if (month) trips = trips.filter(t => t.date.startsWith(month));
+
+  trips.sort((a,b) => b.date.localeCompare(a.date));
+
+  const tbody = document.getElementById('trips-tbody');
+  tbody.innerHTML = trips.map(t => `
+    <tr onclick="openDetail('${t.id}')">
+      <td>${fmtDate(t.date)}</td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.startAddr}</td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.endAddr}</td>
+      <td style="font-weight:600">${fmtKm(t.km)}</td>
+      <td style="color:var(--muted)">${t.kwh ? fmtKm(t.kwh) : '—'}</td>
+      <td><span class="badge ${t.purpose==='tjänst'?'badge-biz':'badge-priv'}">${t.purpose}</span></td>
+      <td style="color:var(--muted);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.note||'—'}</td>
+      <td onclick="event.stopPropagation()">
+        <div class="btn-row">
+          <button class="btn-icon" onclick="copyTrip('${t.id}')" title="Kopiera resa">📋</button>
+          <button class="btn-icon" onclick="editTrip('${t.id}')" title="Redigera">✏️</button>
+          <button class="btn-icon del" onclick="deleteTrip('${t.id}')" title="Ta bort">🗑️</button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+
+  document.getElementById('trips-empty').style.display = trips.length ? 'none' : 'block';
+}
+
+function clearFilters() {
+  document.getElementById('search-q').value = '';
+  document.getElementById('filter-purpose').value = '';
+  document.getElementById('filter-month').value = '';
+  renderTrips();
+}
+
+function deleteTrip(id) {
+  if (!confirm('Ta bort resan?')) return;
+  saveTrips(getTrips().filter(t => t.id !== id));
+  renderTrips();
+  toast('Resa borttagen');
+}
+
+// ══════════════════════════════════════════
+// COPY TRIP
+// ══════════════════════════════════════════
+function copyTrip(id) {
+  const trips = getTrips();
+  const t = trips.find(x => x.id === id);
+  if (!t) return;
+  nav('add');
+  setTimeout(() => {
+    document.getElementById('f-date').value = new Date().toISOString().slice(0,10);
+    document.getElementById('f-vehicle').value = t.vehicle || '';
+    document.getElementById('f-start-addr').value = t.startAddr || '';
+    document.getElementById('f-start-lat').value = t.startLat || '';
+    document.getElementById('f-start-lng').value = t.startLng || '';
+    document.getElementById('f-end-addr').value = t.endAddr || '';
+    document.getElementById('f-end-lat').value = t.endLat || '';
+    document.getElementById('f-end-lng').value = t.endLng || '';
+    document.getElementById('f-km').value = t.km || '';
+    document.getElementById('f-kwh').value = t.kwh || '';
+    document.getElementById('f-purpose').value = t.purpose || '';
+    document.getElementById('f-note').value = t.note || '';
+    document.getElementById('f-start-time').value = t.startTime || '';
+    document.getElementById('f-end-time').value = t.endTime || '';
+    renderFavChips();
+    updateFormMap();
+    toast('Resa kopierad — ändra datum och spara 📋', 'ok');
+  }, 200);
+}
+
+// ══════════════════════════════════════════
+// SAVED ADDRESSES (FAVOURITES)
+// ══════════════════════════════════════════
+const LS_FAVS = 'kj_favs';
+function getFavs() { try { return JSON.parse(localStorage.getItem(LS_FAVS)||'[]'); } catch { return []; } }
+function saveFavs(f) { localStorage.setItem(LS_FAVS, JSON.stringify(f)); }
+
+function addFav(type) {
+  const addr = document.getElementById('f-' + type + '-addr').value.trim();
+  const lat = document.getElementById('f-' + type + '-lat').value;
+  const lng = document.getElementById('f-' + type + '-lng').value;
+  if (!addr) { toast('Ange en adress först', 'err'); return; }
+  const label = prompt('Namn på favoriten (t.ex. Hemma, Jobbet):', addr.split(',')[0]);
+  if (!label) return;
+  const favs = getFavs();
+  if (favs.find(f => f.addr === addr)) { toast('Redan sparad', 'warn'); return; }
+  favs.push({ label, addr, lat, lng });
+  saveFavs(favs);
+  renderFavChips();
+  toast('⭐ Sparad: ' + label, 'ok');
+}
+
+function removeFav(idx) {
+  const favs = getFavs();
+  favs.splice(idx, 1);
+  saveFavs(favs);
+  renderFavChips();
+}
+
+function applyFav(type, idx) {
+  const fav = getFavs()[idx];
+  if (!fav) return;
+  document.getElementById('f-' + type + '-addr').value = fav.addr;
+  document.getElementById('f-' + type + '-lat').value = fav.lat || '';
+  document.getElementById('f-' + type + '-lng').value = fav.lng || '';
+  updateFormMap();
+  toast('📍 ' + fav.label, 'ok');
+}
+
+function renderFavChips() {
+  const favs = getFavs();
+  ['start','end'].forEach(type => {
+    const el = document.getElementById('fav-chips-' + type);
+    if (!el) return;
+    if (!favs.length) {
+      el.innerHTML = '<span style="font-size:12px;color:var(--muted)">Inga favoriter — skriv adress och klicka ⭐ Spara</span>';
+      return;
+    }
+    el.innerHTML = '';
+    favs.forEach((fav, i) => {
+      const chip = document.createElement('span');
+      chip.style.cssText = 'display:inline-flex;align-items:center;gap:4px;background:var(--bg3);border:1px solid var(--border);border-radius:20px;padding:3px 10px;font-size:12px;cursor:pointer';
+      const txt = document.createTextNode('⭐ ' + fav.label + ' ');
+      const rm = document.createElement('span');
+      rm.textContent = '✕';
+      rm.title = 'Ta bort';
+      rm.style.cssText = 'color:var(--muted);font-size:11px';
+      rm.addEventListener('click', e => { e.stopPropagation(); removeFav(i); });
+      chip.appendChild(txt);
+      chip.appendChild(rm);
+      chip.addEventListener('click', () => applyFav(type, i));
+      el.appendChild(chip);
+    });
+  });
+}
+
+
+// ══════════════════════════════════════════
+// FORM + GEOCODING
+// ══════════════════════════════════════════
+let formMap = null, formMarkers = [], formRouteLine = null;
+let geocodeTimers = {};
+
+function initFormMap() {
+  if (!formMap) {
+    formMap = L.map('form-map').setView([59.33, 18.06], 5);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:19}).addTo(formMap);
+  }
+  formMap.invalidateSize();
+}
+
+async function geocodeInput(which) {
+  const input = document.getElementById(`f-${which}-addr`).value;
+  clearTimeout(geocodeTimers[which]);
+  if (input.length < 3) { document.getElementById(`ac-${which}`).classList.remove('open'); return; }
+  geocodeTimers[which] = setTimeout(async () => {
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(input)}&format=json&limit=5&countrycodes=se,no,dk,fi&accept-language=sv`, {headers:{'User-Agent':'TeslaKorjournal/1.0'}});
+      const data = await res.json();
+      const list = document.getElementById(`ac-${which}`);
+      list.innerHTML = data.map(r => `<div class="ac-item" onclick="selectAddress('${which}','${r.display_name.replace(/'/g,"\\'")}',${r.lat},${r.lon})">${r.display_name}</div>`).join('');
+      list.classList.toggle('open', data.length > 0);
+    } catch(e) {}
+  }, 400);
+}
+
+function selectAddress(which, addr, lat, lng) {
+  document.getElementById(`f-${which}-addr`).value = addr;
+  document.getElementById(`f-${which}-lat`).value = lat;
+  document.getElementById(`f-${which}-lng`).value = lng;
+  document.getElementById(`ac-${which}`).classList.remove('open');
+  updateFormMap();
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.ac-wrap')) {
+    document.querySelectorAll('.ac-list').forEach(l => l.classList.remove('open'));
+  }
+});
+
+async function updateFormMap() {
+  const sLat = +document.getElementById('f-start-lat').value;
+  const sLng = +document.getElementById('f-start-lng').value;
+  const eLat = +document.getElementById('f-end-lat').value;
+  const eLng = +document.getElementById('f-end-lng').value;
+
+  if (!formMap) return;
+  formMarkers.forEach(m => formMap.removeLayer(m));
+  if (formRouteLine) { formMap.removeLayer(formRouteLine); formRouteLine = null; }
+  formMarkers = [];
+
+  if (sLat && sLng) {
+    const m = L.marker([sLat,sLng],{icon:greenIcon()}).addTo(formMap).bindPopup('Start');
+    formMarkers.push(m);
+  }
+  if (eLat && eLng) {
+    const m = L.marker([eLat,eLng],{icon:redIcon()}).addTo(formMap).bindPopup('Slut');
+    formMarkers.push(m);
+  }
+  if (sLat && sLng && eLat && eLng) {
+    formMap.fitBounds([[sLat,sLng],[eLat,eLng]], {padding:[30,30]});
+    // Fetch route
+    try {
+      const url = `https://router.project-osrm.org/route/v1/driving/${sLng},${sLat};${eLng},${eLat}?overview=full&geometries=geojson`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data.routes && data.routes[0]) {
+        const route = data.routes[0];
+        formRouteLine = L.geoJSON(route.geometry, {style:{color:'#e31937',weight:3,opacity:.8}}).addTo(formMap);
+        const km = (route.distance/1000).toFixed(1);
+        document.getElementById('f-km').value = km;
+        document.getElementById('form-route-info').textContent = `${km} km · ${Math.round(route.duration/60)} min`;
+      }
+    } catch(e) {
+      // fallback: straight line + haversine
+      formRouteLine = L.polyline([[sLat,sLng],[eLat,eLng]],{color:'#e31937',dashArray:'5,8',opacity:.7}).addTo(formMap);
+      const km = haversine(sLat,sLng,eLat,eLng);
+      document.getElementById('f-km').value = km.toFixed(1);
+      document.getElementById('form-route-info').textContent = `≈ ${km.toFixed(1)} km (luftlinje)`;
+    }
+  } else if (sLat && sLng) {
+    formMap.setView([sLat,sLng], 13);
+  }
+}
+
+function haversine(lat1,lng1,lat2,lng2) {
+  const R=6371, dLat=(lat2-lat1)*Math.PI/180, dLng=(lng2-lng1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+function greenIcon() {
+  return L.divIcon({className:'',html:'<div style="width:12px;height:12px;background:#3ddc84;border-radius:50%;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>',iconSize:[12,12],iconAnchor:[6,6]});
+}
+function redIcon() {
+  return L.divIcon({className:'',html:'<div style="width:12px;height:12px;background:#e31937;border-radius:50%;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>',iconSize:[12,12],iconAnchor:[6,6]});
+}
+
+function submitTrip(e) {
+  e.preventDefault();
+  const id = document.getElementById('edit-id').value || uid();
+  const trip = {
+    id,
+    date: document.getElementById('f-date').value,
+    startTime: document.getElementById('f-start-time').value,
+    endTime: document.getElementById('f-end-time').value,
+    startAddr: document.getElementById('f-start-addr').value,
+    endAddr: document.getElementById('f-end-addr').value,
+    startLat: document.getElementById('f-start-lat').value,
+    startLng: document.getElementById('f-start-lng').value,
+    endLat: document.getElementById('f-end-lat').value,
+    endLng: document.getElementById('f-end-lng').value,
+    km: document.getElementById('f-km').value,
+    kwh: document.getElementById('f-kwh').value,
+    purpose: document.getElementById('f-purpose').value,
+    passengers: document.getElementById('f-passengers').value,
+    note: document.getElementById('f-note').value,
+    vehicle: document.getElementById('f-vehicle').value,
+  };
+  const trips = getTrips();
+  const idx = trips.findIndex(t => t.id === id);
+  if (idx >= 0) trips[idx] = trip;
+  else trips.push(trip);
+  saveTrips(trips);
+  toast(idx >= 0 ? '✅ Resa uppdaterad' : '✅ Resa sparad', 'ok');
+  resetForm();
+  nav('trips');
+}
+
+function resetForm() {
+  document.getElementById('edit-id').value = '';
+  document.getElementById('form-title').textContent = 'Ny resa';
+  document.getElementById('trip-form').reset();
+  document.getElementById('f-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('form-route-info').textContent = '';
+  document.getElementById('f-vehicle').value = localStorage.getItem('last_vehicle') || '';
+  if (formMap) {
+    formMarkers.forEach(m => formMap.removeLayer(m));
+    if (formRouteLine) formMap.removeLayer(formRouteLine);
+    formMarkers = []; formRouteLine = null;
+  }
+}
+
+function editTrip(id) {
+  closeDetailModal();
+  const t = getTrips().find(x => x.id === id);
+  if (!t) return;
+  nav('add');
+  setTimeout(() => {
+    document.getElementById('form-title').textContent = 'Redigera resa';
+    document.getElementById('edit-id').value = t.id;
+    document.getElementById('f-date').value = t.date;
+    document.getElementById('f-start-time').value = t.startTime||'';
+    document.getElementById('f-end-time').value = t.endTime||'';
+    document.getElementById('f-start-addr').value = t.startAddr;
+    document.getElementById('f-end-addr').value = t.endAddr;
+    document.getElementById('f-start-lat').value = t.startLat||'';
+    document.getElementById('f-start-lng').value = t.startLng||'';
+    document.getElementById('f-end-lat').value = t.endLat||'';
+    document.getElementById('f-end-lng').value = t.endLng||'';
+    document.getElementById('f-km').value = t.km||'';
+    document.getElementById('f-kwh').value = t.kwh||'';
+    document.getElementById('f-purpose').value = t.purpose||'';
+    document.getElementById('f-passengers').value = t.passengers||'';
+    document.getElementById('f-note').value = t.note||'';
+    document.getElementById('f-vehicle').value = t.vehicle||'';
+    initFormMap();
+    updateFormMap();
+  }, 100);
+}
+
+// ══════════════════════════════════════════
+// DETAIL MODAL
+// ══════════════════════════════════════════
+let currentDetailId = null, detailMap = null;
+
+function openDetail(id) {
+  const t = getTrips().find(x => x.id === id);
+  if (!t) return;
+  currentDetailId = id;
+  document.getElementById('detail-title').textContent = `${fmtDate(t.date)} · ${fmtKm(t.km)} km`;
+  document.getElementById('detail-grid').innerHTML = [
+    ['Datum', fmtDate(t.date)],
+    ['Fordon', t.vehicle||'—'],
+    ['Starttid', t.startTime||'—'],
+    ['Sluttid', t.endTime||'—'],
+    ['Från', t.startAddr],
+    ['Till', t.endAddr],
+    ['Avstånd', fmtKm(t.km)+' km'],
+    ['Energi', t.kwh ? fmtKm(t.kwh)+' kWh' : '—'],
+    ['Syfte', t.purpose],
+    ['Passagerare', t.passengers||'—'],
+    ['Anteckning', t.note||'—'],
+  ].map(([k,v]) => `<div class="drow"><div class="drow-label">${k}</div><div class="drow-val">${v}</div></div>`).join('');
+
+  document.getElementById('detail-overlay').classList.add('open');
+  setTimeout(() => {
+    if (!detailMap) {
+      detailMap = L.map('detail-map').setView([59.33,18.06],6);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:19}).addTo(detailMap);
+    } else {
+      detailMap.eachLayer(l => { if (l instanceof L.Marker||l instanceof L.Polyline||l instanceof L.GeoJSON) detailMap.removeLayer(l); });
+    }
+    if (t.startLat && t.startLng) L.marker([+t.startLat,+t.startLng],{icon:greenIcon()}).addTo(detailMap).bindPopup('Start: '+t.startAddr);
+    if (t.endLat && t.endLng) L.marker([+t.endLat,+t.endLng],{icon:redIcon()}).addTo(detailMap).bindPopup('Slut: '+t.endAddr);
+    if (t.startLat && t.startLng && t.endLat && t.endLng) {
+      detailMap.fitBounds([[+t.startLat,+t.startLng],[+t.endLat,+t.endLng]],{padding:[20,20]});
+      if (t.routeGeoJSON) {
+        L.geoJSON(t.routeGeoJSON,{style:{color:'#e31937',weight:3}}).addTo(detailMap);
+      } else {
+        L.polyline([[+t.startLat,+t.startLng],[+t.endLat,+t.endLng]],{color:'#e31937',dashArray:'6,8'}).addTo(detailMap);
+      }
+    }
+    detailMap.invalidateSize();
+  }, 100);
+}
+
+function closeDetail(e) {
+  if (e.target === document.getElementById('detail-overlay')) closeDetailModal();
+}
+function closeDetailModal() {
+  document.getElementById('detail-overlay').classList.remove('open');
+}
+
+// ══════════════════════════════════════════
+// TESLA API
+// ══════════════════════════════════════════
+const TESLA_BASE = {
+  eu: '/fleet-eu',
+  na: '/fleet-na',
+  fe: '/fleet-fe',
+};
+const TESLA_AUTH_URL = 'https://auth.tesla.com/oauth2/v3/authorize';
+const TESLA_TOKEN_URL = 'https://auth.tesla.com/oauth2/v3/token';
+const LS_REFRESH = 'tesla_refresh_token';
+const LS_CLIENT = 'tesla_client_id';
+let tsVehicles = [];
+let tsCharges = [];
+
+// ── PKCE helpers ──
+function b64url(buf) {
+  return btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+}
+function genVerifier() {
+  const arr = new Uint8Array(32);
+  crypto.getRandomValues(arr);
+  return b64url(arr);
+}
+async function genChallenge(verifier) {
+  const enc = new TextEncoder().encode(verifier);
+  const hash = await crypto.subtle.digest('SHA-256', enc);
+  return b64url(hash);
+}
+
+function tsTab(name) {
+  ['connect','vehicles','import','help'].forEach(t => {
+    document.getElementById('ts-tab-'+t).style.display = t===name ? 'block' : 'none';
+  });
+  document.querySelectorAll('#view-tesla .tab').forEach((b,i) => {
+    b.classList.toggle('active', ['connect','vehicles','import','help'][i]===name);
+  });
+  if (name === 'vehicles') tsRenderVehicles();
+}
+
+function toggleManualToken() {
+  const box = document.getElementById('manual-token-box');
+  box.style.display = box.style.display === 'none' ? 'block' : 'none';
+}
+
+async function tsRequest(path, method) {
+  let token = localStorage.getItem(LS_TOKEN);
+  const region = localStorage.getItem(LS_REGION) || 'eu';
+  if (!token) {
+    // Try to refresh
+    token = await tsRefreshToken();
+    if (!token) throw new Error('Ingen token – logga in via Tesla OAuth');
+  }
+  const fetchOpts = { method: method||'GET', headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } };
+  const r = await fetch(TESLA_BASE[region] + path, fetchOpts);
+  if (r.status === 401) {
+    // Token expired – try refresh
+    const newToken = await tsRefreshToken();
+    if (!newToken) throw new Error('Session utgången – logga in igen');
+    const r2 = await fetch(TESLA_BASE[region] + path, {
+      headers: { 'Authorization': 'Bearer ' + newToken, 'Content-Type': 'application/json' }
+    });
+    if (!r2.ok) throw new Error(`Tesla API ${r2.status}: ${await r2.text()}`);
+    return r2.json();
+  }
+  if (!r.ok) throw new Error(`Tesla API ${r.status}: ${await r.text()}`);
+  return r.json();
+}
+
+async function tsRefreshToken() {
+  const refresh = localStorage.getItem(LS_REFRESH);
+  const clientId = localStorage.getItem(LS_CLIENT);
+  if (!refresh || !clientId) return null;
+  try {
+    const r = await fetch(TESLA_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type:'refresh_token', client_id:clientId, refresh_token:refresh })
+    });
+    if (!r.ok) return null;
+    const data = await r.json();
+    if (data.access_token) {
+      localStorage.setItem(LS_TOKEN, data.access_token);
+      if (data.refresh_token) localStorage.setItem(LS_REFRESH, data.refresh_token);
+      return data.access_token;
+    }
+  } catch(e) {}
+  return null;
+}
+
+async function tsOAuthLogin() {
+  const clientId = document.getElementById('ts-client-id').value.trim();
+  const region = document.getElementById('ts-region').value;
+  const redirectUri = document.getElementById('ts-redirect-uri').value.trim() || (window.location.origin + '/callback.html');
+
+  if (!clientId) { toast('Ange Client ID', 'err'); return; }
+
+  const verifier = genVerifier();
+  const challenge = await genChallenge(verifier);
+  const state = b64url(crypto.getRandomValues(new Uint8Array(12)));
+
+  localStorage.setItem('ts_pkce_verifier', verifier);
+  const clientSecret = document.getElementById('ts-client-secret').value.trim();
+  if (clientSecret) localStorage.setItem('ts_client_secret', clientSecret);
+  localStorage.setItem('ts_pkce_state', state);
+  localStorage.setItem('ts_redirect_uri', redirectUri);
+  localStorage.setItem(LS_CLIENT, clientId);
+  localStorage.setItem(LS_REGION, region);
+
+  const scopes = 'openid offline_access vehicle_device_data vehicle_cmds vehicle_location';
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    scope: scopes,
+    state,
+    code_challenge: challenge,
+    code_challenge_method: 'S256',
+    prompt: 'consent',
+  });
+
+
+
+  window.location.href = TESLA_AUTH_URL + '?' + params.toString();
+}
+
+async function tsHandleCallback() {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code');
+  const state = params.get('state');
+  if (!code) return;
+  window.history.replaceState({}, document.title, window.location.pathname);
+  await tsExchangeCode(code, state);
+}
+
+async function tsHandleManualCallback() {
+  const raw = document.getElementById('ts-callback-url').value.trim();
+  if (!raw) { toast('Klistra in adressen från webbläsaren', 'err'); return; }
+  let params;
+  try {
+    // Accept full URL or just query string
+    const url = raw.includes('?') ? raw : 'http://x?' + raw;
+    params = new URLSearchParams(new URL(url).search);
+  } catch(e) {
+    // Try parsing directly
+    params = new URLSearchParams(raw.includes('?') ? raw.split('?')[1] : raw);
+  }
+  const code = params.get('code');
+  const state = params.get('state');
+  if (!code) { toast('Hittade ingen kod i adressen – kopiera hela adressfältet', 'err'); return; }
+  await tsExchangeCode(code, state);
+}
+
+async function tsExchangeCode(code, state) {
+  const savedState = localStorage.getItem('ts_pkce_state');
+  const verifier = localStorage.getItem('ts_pkce_verifier');
+  const redirectUri = localStorage.getItem('ts_redirect_uri');
+  const clientId = localStorage.getItem(LS_CLIENT);
+
+  if (state && savedState && state !== savedState) {
+    toast('Säkerhetskod matchar inte – försök logga in igen', 'err');
+    return;
+  }
+
+  toast('Hämtar token från Tesla...', 'ok');
+  try {
+    const clientSecret = localStorage.getItem('ts_client_secret') || '';
+    const tokenParams = {
+      grant_type: 'authorization_code',
+      client_id: clientId,
+      code,
+      redirect_uri: redirectUri,
+      code_verifier: verifier,
+    };
+    if (clientSecret) tokenParams.client_secret = clientSecret;
+    const r = await fetch(TESLA_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(tokenParams)
+    });
+    const respText = await r.text();
+    if (!r.ok) throw new Error('Token-fel ' + r.status + ': ' + respText);
+    const data = JSON.parse(respText);
+    if (!data.access_token) throw new Error('Ingen access_token i svar');
+    localStorage.setItem(LS_TOKEN, data.access_token);
+    if (data.refresh_token) localStorage.setItem(LS_REFRESH, data.refresh_token);
+    localStorage.removeItem('ts_pkce_verifier');
+    localStorage.removeItem('ts_pkce_state');
+
+    const vdata = await tsRequest('/api/1/vehicles');
+    tsVehicles = vdata.response || [];
+    tsUpdateStatus(true, `${tsVehicles.length} fordon · Token sparad`);
+    toast('✅ Inloggad med Tesla!', 'ok');
+    nav('tesla');
+    tsTab('vehicles');
+  } catch(e) {
+    toast('Fel: ' + e.message, 'err');
+    console.error(e);
+  }
+}
+
+async function tsConnectManual() {
+  const token = document.getElementById('ts-token-input').value.trim();
+  const region = document.getElementById('ts-region').value;
+  if (!token) { toast('Ange en token', 'err'); return; }
+  localStorage.setItem(LS_TOKEN, token);
+  localStorage.setItem(LS_REGION, region);
+  try {
+    const data = await tsRequest('/api/1/vehicles');
+    tsVehicles = data.response || [];
+    tsUpdateStatus(true, `${tsVehicles.length} fordon hittade`);
+    toast('✅ Ansluten till Tesla API');
+    tsTab('vehicles');
+  } catch(e) {
+    tsUpdateStatus(false);
+    if (e.message.includes('Failed to fetch') || e.message.includes('CORS')) {
+      toast('CORS-fel – kör appen via lokal server. Se Hjälp-fliken.', 'err');
+    } else {
+      toast('Fel: ' + e.message, 'err');
+    }
+  }
+}
+
+function tsUpdateStatus(connected, sub='') {
+  document.getElementById('ts-dot').className = 'dot' + (connected?' on':'');
+  document.getElementById('header-dot').className = 'dot' + (connected?' on':'');
+  document.getElementById('ts-status-text').textContent = connected ? 'Ansluten till Tesla' : 'Ej ansluten';
+  document.getElementById('ts-status-sub').textContent = sub;
+  document.getElementById('header-status').textContent = connected ? 'Tesla ansluten' : 'Ej ansluten';
+  document.getElementById('ts-disconnect-btn').style.display = connected ? 'flex' : 'none';
+}
+
+function tsDisconnect() {
+  localStorage.removeItem(LS_TOKEN);
+  tsVehicles = [];
+  tsUpdateStatus(false);
+  toast('Frånkopplad');
+}
+
+async function tsRenderVehicles() {
+  const el = document.getElementById('ts-vehicles-list');
+  if (!localStorage.getItem(LS_TOKEN)) {
+    el.innerHTML = '<div class="empty"><div class="icon">🔑</div><h3>Ej ansluten</h3><p>Gå till fliken "Anslut".</p></div>';
+    return;
+  }
+  el.innerHTML = '<div class="text-muted" style="padding:16px">Hämtar fordonsdata...</div>';
+  try {
+    const data = await tsRequest('/api/1/vehicles');
+    tsVehicles = data.response || [];
+    if (!tsVehicles.length) { el.innerHTML = '<div class="empty"><div class="icon">🚗</div><h3>Inga fordon hittade</h3></div>'; return; }
+    el.innerHTML = tsVehicles.map(v => `
+      <div class="ts-vehicle">
+        <div class="ts-vehicle-icon">🚗</div>
+        <div class="ts-vehicle-info">
+          <h4>${v.display_name || v.vin}</h4>
+          <p>VIN: ${v.vin} · ${v.state||'okänd status'}</p>
+        </div>
+        <div class="ts-vehicle-status">
+          <div style="font-size:12px;color:var(--muted)">${v.state==='online'?'🟢 Online':'⚫ Offline'}</div>
+        </div>
+      </div>
+    `).join('');
+    // Save vehicle name for form
+    if (tsVehicles[0]) localStorage.setItem('last_vehicle', tsVehicles[0].display_name || 'Tesla');
+  } catch(e) {
+    el.innerHTML = `<div class="warn-box">Fel: ${e.message}</div>`;
+  }
+}
+
+async function tsFetchVehicleData() {
+  if (!localStorage.getItem(LS_TOKEN)) { toast('Anslut Tesla API först', 'err'); return; }
+  const panel = document.getElementById('ts-vehicle-data-panel');
+  panel.innerHTML = '<div class="text-muted" style="padding:16px">Hämtar fordonsdata...</div>';
+  try {
+    if (!tsVehicles.length) {
+      const data = await tsRequest('/api/1/vehicles');
+      tsVehicles = data.response || [];
+    }
+    if (!tsVehicles.length) {
+      panel.innerHTML = '<div class="empty"><div class="icon">🚗</div><h3>Inga fordon hittades</h3></div>';
+      return;
+    }
+    const v = tsVehicles[0];
+    const vid = v.id_s || String(v.id);
+
+    let odo = null, lat = null, lng = null, ts2 = '', debugLines = [];
+
+    // Decode token to show scopes
+    try {
+      const token = localStorage.getItem(LS_TOKEN) || '';
+      const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+      debugLines.push('Token scopes: ' + (payload.scp || payload.scope || 'ej hittade'));
+      debugLines.push('Token sub: ' + (payload.sub || '?'));
+    } catch(et) { debugLines.push('Token-fel: ' + et.message); }
+
+    // Call 1: base vehicle_data → odometer
+    try {
+      const r1 = await tsRequest('/api/1/vehicles/' + vid + '/vehicle_data');
+      const resp = r1.response || {};
+      const vs = resp.vehicle_state || {};
+      odo = vs.odometer ? Math.round(vs.odometer * 1.60934) : null;
+      debugLines.push('Bas-keys: ' + Object.keys(resp).join(', '));
+    } catch(e1) { debugLines.push('Bas-anrop fel: ' + e1.message); }
+
+    // Full vehicle_data — ger drive_state.latitude = RIKTIG position (active_route_* = destination, används ej)
+    try {
+      const r2 = await tsRequest('/api/1/vehicles/' + vid + '/vehicle_data');
+      const resp2 = r2.response || {};
+      const ds = resp2.drive_state || {};
+      debugLines.push('drive_state: ' + JSON.stringify(ds).slice(0, 300));
+      lat = ds.latitude || null;
+      lng = ds.longitude || null;
+      if (lat) debugLines.push('✅ Riktig position: ' + lat.toFixed(5) + ', ' + lng.toFixed(5));
+      else if (ds.active_route_latitude) debugLines.push('⚠️ Ingen riktig pos – bilen kör med nav. Destination visas ej.');
+      if (ds.timestamp) ts2 = new Date(ds.timestamp).toLocaleString('sv-SE');
+    } catch(e2) { debugLines.push('vehicle_data-anrop fel: ' + e2.message); }
+
+    let addr = '';
+    if (lat && lng) {
+      try {
+        const geo = await fetch('https://nominatim.openstreetmap.org/reverse?lat=' + lat + '&lon=' + lng + '&format=json');
+        const gj = await geo.json();
+        addr = gj.display_name || (lat.toFixed(4) + ', ' + lng.toFixed(4));
+      } catch(eg) { addr = lat.toFixed(4) + ', ' + lng.toFixed(4); }
+    }
+    window._tsLat = lat; window._tsLng = lng; window._tsAddr = addr;
+
+    let html2 = '<div class="card mb-16" style="padding:20px">'
+      + '<div style="font-size:20px;font-weight:700;margin-bottom:16px">🚗 ' + (v.display_name||v.vin) + '</div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">'
+      + '<div style="background:var(--bg3);border-radius:8px;padding:12px"><div style="color:var(--muted);font-size:12px;margin-bottom:4px">ODOMETER</div>'
+      + '<div style="font-size:20px;font-weight:700">' + (odo ? odo.toLocaleString('sv-SE') + ' km' : '—') + '</div></div>'
+      + '<div style="background:var(--bg3);border-radius:8px;padding:12px"><div style="color:var(--muted);font-size:12px;margin-bottom:4px">GPS</div>'
+      + '<div style="font-size:13px;font-weight:600">' + (lat ? '📍 ' + lat.toFixed(4) + ', ' + lng.toFixed(4) : '❌ Ingen') + '</div></div></div>';
+    if (addr) {
+      html2 += '<div style="background:var(--bg3);border-radius:8px;padding:12px;margin-bottom:16px">'
+        + '<div style="color:var(--muted);font-size:12px;margin-bottom:4px">POSITION' + (ts2 ? ' · ' + ts2 : '') + '</div>'
+        + '<div style="font-size:13px">' + addr + '</div></div>'
+        + '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">'
+        + '<button class="btn btn-primary" onclick="startTripFromTesla()">▶ Starta resa härifrån</button>'
+        + '<button class="btn btn-sec" onclick="endTripFromTesla()">⏹ Avsluta resa här</button></div>';
+    }
+    html2 += '<details open><summary style="color:var(--muted);font-size:12px;cursor:pointer">Debug</summary>'
+      + '<div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.8;word-break:break-all">' + debugLines.join('<br>') + '</div></details></div>';
+    panel.innerHTML = html2;
+    toast(lat ? 'Position hämtad ✅' : 'Odometer hämtad', lat ? 'ok' : 'warn');
+  } catch(e) {
+    panel.innerHTML = '<div class="warn-box">Fel: ' + e.message + '</div>';
+    toast('Fel: ' + e.message, 'err');
+  }
+}
+
+
+function startTripFromTesla() {
+  const addr = window._tsAddr || ''; const lat = window._tsLat || ''; const lng = window._tsLng || '';
+  nav('new');
+  setTimeout(() => {
+    const el = document.getElementById('start-addr'); if (el) el.value = addr;
+    const latEl = document.getElementById('start-lat'); if (latEl) latEl.value = lat;
+    const lngEl = document.getElementById('start-lng'); if (lngEl) lngEl.value = lng;
+    updateFormMap();
+    toast('Startadress ifylld från Tesla 📍', 'ok');
+  }, 300);
+}
+
+function endTripFromTesla() {
+  const addr = window._tsAddr || ''; const lat = window._tsLat || ''; const lng = window._tsLng || '';
+  nav('new');
+  setTimeout(() => {
+    const el = document.getElementById('end-addr'); if (el) el.value = addr;
+    const latEl = document.getElementById('end-lat'); if (latEl) latEl.value = lat;
+    const lngEl = document.getElementById('end-lng'); if (lngEl) lngEl.value = lng;
+    updateFormMap();
+    toast('Slutadress ifylld från Tesla 📍', 'ok');
+  }, 300);
+}
+
+
+// ══════════════════════════════════════════
+// JSON IMPORT
+// ══════════════════════════════════════════
+function importCSV() {
+  const file = document.getElementById('csv-import-file').files[0];
+  if (!file) { toast('Välj en CSV-fil', 'err'); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const lines = e.target.result.split('\n').filter(l => l.trim());
+      const headers = lines[0].split(',').map(h => h.replace(/"/g,'').trim());
+      let count = 0;
+      const trips = getTrips();
+      const existing = new Set(trips.map(t => t.date + t.startAddr + t.endAddr));
+      for (let i = 1; i < lines.length; i++) {
+        const vals = lines[i].match(/(".*?"|[^,]+)(?=,|$)/g) || [];
+        const clean = vals.map(v => v.replace(/^"|"$/g,'').trim());
+        const row = {};
+        headers.forEach((h,idx) => row[h] = clean[idx] || '');
+        const trip = {
+          id: Date.now().toString() + i,
+          date: row['Datum'] || row['date'] || '',
+          startTime: row['Starttid'] || row['startTime'] || '',
+          endTime: row['Sluttid'] || row['endTime'] || '',
+          startAddr: row['Från'] || row['startAddr'] || '',
+          endAddr: row['Till'] || row['endAddr'] || '',
+          km: parseFloat(row['Kilometer'] || row['km'] || 0) || '',
+          kwh: parseFloat(row['kWh'] || row['kwh'] || 0) || '',
+          purpose: row['Syfte'] || row['purpose'] || 'privat',
+          vehicle: row['Fordon'] || row['vehicle'] || '',
+          note: row['Anteckning'] || row['note'] || ''
+        };
+        if (!trip.date) continue;
+        const key = trip.date + trip.startAddr + trip.endAddr;
+        if (!existing.has(key)) { trips.unshift(trip); existing.add(key); count++; }
+      }
+      saveTrips(trips);
+      renderOverview();
+      toast(`✅ ${count} resor importerade från CSV`, 'ok');
+    } catch(e) { toast('Fel vid CSV-import: ' + e.message, 'err'); }
+  };
+  reader.readAsText(file, 'utf-8');
+}
+
+function importJSON() {
+  const file = document.getElementById('json-import-file').files[0];
+  if (!file) { toast('Välj en JSON-fil', 'err'); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      let data = JSON.parse(e.target.result);
+      if (!Array.isArray(data)) data = [data];
+      const trips = getTrips();
+      let count = 0;
+      data.forEach(item => {
+        trips.push({ id:uid(), date:item.date||new Date().toISOString().slice(0,10), startAddr:item.start||item.startAddr||'', endAddr:item.end||item.endAddr||'', km:item.km||item.distance||'', kwh:item.kwh||item.energy||'', purpose:item.purpose||'privat', note:item.note||'', vehicle:item.vehicle||'Tesla', startLat:item.startLat||'', startLng:item.startLng||'', endLat:item.endLat||'', endLng:item.endLng||'' });
+        count++;
+      });
+      saveTrips(trips);
+      toast(`✅ ${count} resor importerade`, 'ok');
+      nav('trips');
+    } catch(err) { toast('Ogiltig JSON-fil: ' + err.message, 'err'); }
+  };
+  reader.readAsText(file);
+}
+
+// ══════════════════════════════════════════
+// EXPORT
+// ══════════════════════════════════════════
+function getFilteredForExport() {
+  let trips = getTrips();
+  const from = document.getElementById('exp-from').value;
+  const to = document.getElementById('exp-to').value;
+  const pur = document.getElementById('exp-purpose').value;
+  if (from) trips = trips.filter(t => t.date >= from);
+  if (to) trips = trips.filter(t => t.date <= to);
+  if (pur) trips = trips.filter(t => t.purpose === pur);
+  return trips.sort((a,b) => a.date.localeCompare(b.date));
+}
+
+function renderExportPreview() {
+  const trips = getFilteredForExport();
+  const km = trips.reduce((s,t)=>s+(+t.km||0),0);
+  document.getElementById('exp-count').textContent = trips.length;
+  document.getElementById('exp-km').textContent = fmtKm(km) + ' km totalt';
+}
+
+['exp-from','exp-to','exp-purpose'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', renderExportPreview);
+});
+
+function exportExcel() {
+  const trips = getFilteredForExport();
+  if (!trips.length) { toast('Inga resor att exportera', 'err'); return; }
+
+  const rows = [['Datum','Starttid','Sluttid','Från','Till','Kilometer','kWh','Syfte','Fordon','Passagerare','Anteckning']];
+  trips.forEach(t => rows.push([t.date, t.startTime||'', t.endTime||'', t.startAddr, t.endAddr, +t.km||0, +t.kwh||0, t.purpose, t.vehicle||'', t.passengers||'', t.note||'']));
+
+  const bizKm = trips.filter(t=>t.purpose==='tjänst').reduce((s,t)=>s+(+t.km||0),0);
+  const privKm = trips.filter(t=>t.purpose==='privat').reduce((s,t)=>s+(+t.km||0),0);
+  rows.push([]);
+  rows.push(['Summering','','','','','','','','','','']);
+  rows.push(['Antal resor',trips.length,'','Tjänstekilometer',bizKm.toFixed(1),'','Privatkilometer',privKm.toFixed(1),'','','']);
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:12},{wch:10},{wch:10},{wch:30},{wch:30},{wch:12},{wch:8},{wch:10},{wch:16},{wch:16},{wch:30}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Körjournal');
+  XLSX.writeFile(wb, `korjournal_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast('✅ Excel exporterad');
+}
+
+function exportPDF() {
+  const trips = getFilteredForExport();
+  if (!trips.length) { toast('Inga resor att exportera', 'err'); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF('l','mm','a4');
+  doc.setFontSize(16);
+  doc.text('Körjournal', 14, 18);
+  doc.setFontSize(10);
+  doc.setTextColor(120);
+  doc.text(`Exporterad ${new Date().toLocaleDateString('sv-SE')}`, 14, 25);
+
+  const bizKm = trips.filter(t=>t.purpose==='tjänst').reduce((s,t)=>s+(+t.km||0),0);
+  const privKm = trips.filter(t=>t.purpose==='privat').reduce((s,t)=>s+(+t.km||0),0);
+  doc.setTextColor(40);
+  doc.text(`Antal resor: ${trips.length}   Tjänst: ${bizKm.toFixed(1)} km   Privat: ${privKm.toFixed(1)} km   Totalt: ${(bizKm+privKm).toFixed(1)} km`, 14, 32);
+
+  doc.autoTable({
+    startY: 38,
+    head: [['Datum','Från','Till','Km','kWh','Syfte','Anteckning']],
+    body: trips.map(t => [fmtDate(t.date), t.startAddr, t.endAddr, (+t.km||0).toFixed(1), t.kwh||(t.kwh===0?'0':''), t.purpose, t.note||'']),
+    styles: { fontSize: 8.5, cellPadding: 3 },
+    headStyles: { fillColor: [227,25,55], textColor: 255 },
+    alternateRowStyles: { fillColor: [245,245,248] },
+    columnStyles: { 0:{cellWidth:22},1:{cellWidth:52},2:{cellWidth:52},3:{cellWidth:15},4:{cellWidth:14},5:{cellWidth:18},6:{cellWidth:50} }
+  });
+
+  doc.save(`korjournal_${new Date().toISOString().slice(0,10)}.pdf`);
+  toast('✅ PDF exporterad');
+}
+
+function exportCSV() {
+  const trips = getFilteredForExport();
+  if (!trips.length) { toast('Inga resor att exportera', 'err'); return; }
+  const rows = [['Datum','Starttid','Sluttid','Från','Till','Kilometer','kWh','Syfte','Fordon','Anteckning']];
+  trips.forEach(t => rows.push([t.date,t.startTime||'',t.endTime||'',t.startAddr,t.endAddr,t.km||0,t.kwh||0,t.purpose,t.vehicle||'',t.note||'']));
+  const csv = rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const blob = new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `korjournal_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  toast('✅ CSV exporterad');
+}
+
+
+// ══════════════════════════════════════════
+// AUTO-LOG
+// ══════════════════════════════════════════
+const LS_AUTOLOG = 'kj_autolog_trips';
+let alActive = false;
+let alInterval = null;
+let alCarState = 'unknown'; // 'parked' | 'driving'
+let alTripData = null;      // trip in progress
+let alWakeLock = null;
+let alLastPoll = null;
+let alPollCount = 0;
+const AL_INTERVAL_MS = 60000; // 60 seconds
+
+function getAutoTrips() { try { return JSON.parse(localStorage.getItem(LS_AUTOLOG)||'[]'); } catch(e){ return []; } }
+function saveAutoTrips(t) { localStorage.setItem(LS_AUTOLOG, JSON.stringify(t)); }
+
+async function autoLogToggle() {
+  if (!localStorage.getItem(LS_TOKEN)) { toast('Anslut Tesla API först', 'err'); return; }
+  if (alActive) { autoLogStop(); } else { await autoLogStart(); }
+}
+
+async function autoLogStart() {
+  alActive = true;
+  alCarState = 'unknown';
+  document.getElementById('al-btn').textContent = '⏹ Stopp';
+  document.getElementById('al-btn').style.background = 'var(--accent)';
+  // Request wake lock to keep screen/tab alive
+  try {
+    if ('wakeLock' in navigator) {
+      alWakeLock = await navigator.wakeLock.request('screen');
+      alWakeLock.addEventListener('release', () => { if (alActive) navigator.wakeLock.request('screen').then(wl => alWakeLock = wl).catch(()=>{}); });
+    }
+  } catch(e) {}
+  // Request notification permission
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+  alUpdateUI('🟢 Autologgning aktiv', 'Kollar bilen var 60:e sekund...');
+  // Poll immediately, then on interval
+  await autoLogPoll();
+  alInterval = setInterval(autoLogPoll, AL_INTERVAL_MS);
+  toast('Autologgning startad ✅', 'ok');
+}
+
+function autoLogStop() {
+  alActive = false;
+  clearInterval(alInterval);
+  alInterval = null;
+  if (alWakeLock) { alWakeLock.release().catch(()=>{}); alWakeLock = null; }
+  // If trip was in progress, save it as incomplete
+  if (alTripData) {
+    toast('Pågående resa avbröts vid stopp', 'warn');
+    alTripData = null;
+  }
+  alCarState = 'unknown';
+  document.getElementById('al-btn').textContent = '▶ Starta';
+  document.getElementById('al-btn').style.background = '';
+  document.getElementById('al-dot').className = 'autolog-dot';
+  alUpdateUI('Autologgning inaktiv', 'Tryck Starta för att börja logga automatiskt');
+  toast('Autologgning stoppad', 'warn');
+}
+
+// Last known parked position (used as trip start — avoids navigation destination bug)
+let alLastParkedPos = null; // {lat, lng, addr, odo}
+let alLastDrivingPos = null; // {lat, lng} — last known GPS while driving (backup for end addr)
+// Restore last known parked position from localStorage (survives page reload)
+try { const s = localStorage.getItem('al_last_parked'); if (s) alLastParkedPos = JSON.parse(s); } catch(e) {}
+
+async function alReverseGeo(lat, lng) {
+  try {
+    const g = await fetch('https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lng+'&format=json');
+    const gj = await g.json();
+    if (gj.address) {
+      const a = gj.address;
+      const street = a.road || a.pedestrian || a.path || '';
+      const city = a.city || a.town || a.village || a.municipality || '';
+      return (street && city) ? street + ', ' + city : (street || city || gj.display_name || (lat.toFixed(4)+','+lng.toFixed(4)));
+    }
+    return gj.display_name || (lat.toFixed(4)+','+lng.toFixed(4));
+  } catch(e) { return lat.toFixed(4)+','+lng.toFixed(4); }
+}
+
+async function alGetRealPosition(vid) {
+  // Full vehicle_data call gives real drive_state.latitude (not active_route_*)
+  let lat = null, lng = null, odo = null, shiftState = 'P', speed = 0;
+  const r = await tsRequest('/api/1/vehicles/' + vid + '/vehicle_data');
+  const resp = r.response || {};
+  const ds = resp.drive_state || {};
+  const vs = resp.vehicle_state || {};
+  // Real position: latitude/longitude directly (not active_route_*)
+  lat = ds.latitude || null;
+  lng = ds.longitude || null;
+  shiftState = ds.shift_state || 'P';
+  speed = ds.speed || 0;
+  if (vs.odometer) odo = Math.round(vs.odometer * 1.60934);
+  return { lat, lng, odo, shiftState, speed, ds };
+}
+
+async function autoLogPoll() {
+  if (!alActive) return;
+  alPollCount++;
+  alLastPoll = new Date();
+  try {
+    if (!tsVehicles.length) {
+      const vd = await tsRequest('/api/1/vehicles');
+      tsVehicles = vd.response || [];
+    }
+    if (!tsVehicles.length) { alUpdateUI('🟡 Autologgning aktiv', 'Inga fordon hittade'); return; }
+    const vid = tsVehicles[0].id;
+    const ts2 = alLastPoll.toLocaleTimeString('sv-SE', {hour:'2-digit',minute:'2-digit'});
+
+    let lat, lng, odo, shiftState, speed;
+    try {
+      ({ lat, lng, odo, shiftState, speed } = await alGetRealPosition(vid));
+    } catch(e) { alUpdateUI('🟡 Autologgning aktiv', 'Fel: ' + e.message); return; }
+
+    const isDriving = shiftState === 'D' || shiftState === 'R' || (shiftState !== 'P' && speed > 0);
+
+    // While parked: save real position as potential trip start
+    if (!isDriving && lat) {
+      // Reverse geocode only when position changes significantly
+      if (!alLastParkedPos || Math.abs(lat - alLastParkedPos.lat) > 0.0005 || Math.abs(lng - alLastParkedPos.lng) > 0.0005) {
+        const addr = await alReverseGeo(lat, lng);
+        alLastParkedPos = { lat, lng, addr, odo };
+        try { localStorage.setItem('al_last_parked', JSON.stringify(alLastParkedPos)); } catch(e) {}
+      } else if (odo) { alLastParkedPos.odo = odo; try { localStorage.setItem('al_last_parked', JSON.stringify(alLastParkedPos)); } catch(e) {} }
+    }
+
+    if (isDriving && alCarState !== 'driving') {
+      // TRIP START — use last parked position if available, else try current GPS
+      alCarState = 'driving';
+      let startPos = alLastParkedPos;
+      if (!startPos) {
+        // No cached parked position — try current GPS (retry once if null)
+        let sLat = lat, sLng = lng, sOdo = odo;
+        if (!sLat) {
+          await new Promise(r => setTimeout(r, 3000));
+          try { const rr = await alGetRealPosition(vid); sLat = rr.lat; sLng = rr.lng; sOdo = rr.odo || odo; } catch(e) {}
+        }
+        if (sLat) {
+          const addr = await alReverseGeo(sLat, sLng);
+          startPos = { lat: sLat, lng: sLng, addr, odo: sOdo };
+        }
+      }
+      if (!startPos) startPos = { lat: null, lng: null, addr: 'Okänd startadress', odo };
+      alTripData = { startTime: alLastPoll.toISOString(), startAddr: startPos.addr, startLat: startPos.lat, startLng: startPos.lng, startOdo: startPos.odo || odo, date: alLastPoll.toISOString().slice(0,10) };
+      alUpdateUI('🚗 Kör nu!', 'Start: ' + ts2 + ' · ' + (startPos.addr||'').split(',')[0]);
+      document.getElementById('al-dot').className = 'autolog-dot driving';
+      alSendNotification('🚗 Resa startad', (startPos.addr||'').split(',')[0] || 'Kör nu');
+
+    } else if (isDriving) {
+      // Save GPS every driving poll as backup for end address
+      if (lat && lng) alLastDrivingPos = { lat, lng, odo };
+
+    } else if (!isDriving && alCarState === 'driving') {
+      // TRIP END — use current real position; retry GPS a few times if null
+      alCarState = 'parked';
+      let endLat = lat, endLng = lng;
+      // Retry up to 3 times if no GPS (car just parked, may need a moment)
+      for (let i = 0; i < 3 && !endLat; i++) {
+        await new Promise(r => setTimeout(r, 5000));
+        try { const rr = await alGetRealPosition(vid); endLat = rr.lat; endLng = rr.lng; } catch(e) {}
+      }
+      // Fallback: use last known driving position if still no GPS
+      if (!endLat && alLastDrivingPos) { endLat = alLastDrivingPos.lat; endLng = alLastDrivingPos.lng; }
+      let endAddr = endLat ? await alReverseGeo(endLat, endLng) : 'Okänd slutadress';
+      lat = endLat; lng = endLng;
+      if (alTripData) {
+        const kmDiff = (odo && alTripData.startOdo) ? Math.round(odo - alTripData.startOdo) : null;
+        const trip = {
+          id: Date.now().toString(),
+          date: alTripData.date,
+          startTime: alTripData.startTime.slice(11,16),
+          endTime: alLastPoll.toISOString().slice(11,16),
+          startAddr: alTripData.startAddr,
+          endAddr: endAddr,
+          startLat: alTripData.startLat, startLng: alTripData.startLng,
+          endLat: lat, endLng: lng,
+          km: kmDiff || '',
+          kwh: '', purpose: 'tjänst',
+          vehicle: tsVehicles[0] ? (tsVehicles[0].display_name || tsVehicles[0].vin) : 'Tesla',
+          note: '📍 Autologgad', autoLogged: true
+        };
+        // Fetch OSRM route if we have both coords
+        if (trip.startLat && trip.startLng && trip.endLat && trip.endLng) {
+          try {
+            const ru = `https://router.project-osrm.org/route/v1/driving/${trip.startLng},${trip.startLat};${trip.endLng},${trip.endLat}?overview=full&geometries=geojson`;
+            const rr = await fetch(ru); const rd = await rr.json();
+            if (rd.routes && rd.routes[0]) {
+              trip.routeGeoJSON = rd.routes[0].geometry;
+              if (!trip.km) trip.km = Math.round(rd.routes[0].distance / 1000);
+            }
+          } catch(e) {}
+        }
+        const trips = getTrips(); trips.unshift(trip); saveTrips(trips);
+        alTripData = null;
+        if (lat) { alLastParkedPos = { lat, lng, addr: endAddr, odo }; try { localStorage.setItem('al_last_parked', JSON.stringify(alLastParkedPos)); } catch(e) {} }
+        alUpdateUI('🅿 Parkerad', 'Resa sparad · ' + ts2 + (kmDiff ? ' · ' + kmDiff + ' km' : ''));
+        document.getElementById('al-dot').className = 'autolog-dot active';
+        alSendNotification('✅ Resa sparad!', (kmDiff ? kmDiff + ' km · ' : '') + 'Till: ' + endAddr.split(',')[0]);
+        toast('✅ Resa autologgad! Fyll i syfte under Resor.', 'ok');
+        renderOverview(); alRenderTrips();
+      }
+    } else if (!isDriving) {
+      alCarState = 'parked';
+      document.getElementById('al-dot').className = 'autolog-dot active';
+      const posInfo = alLastParkedPos ? alLastParkedPos.addr.split(',')[0] : (lat ? lat.toFixed(4)+','+lng.toFixed(4) : 'Okänd');
+      alUpdateUI('🅿 Parkerad · Väntar...', 'Koll ' + ts2 + ' · ' + posInfo + (odo ? ' · ' + odo.toLocaleString('sv-SE') + ' km' : ''));
+    } else {
+      alUpdateUI('🚗 Kör nu!', 'Hastighet: ' + speed + ' km/h · ' + ts2);
+    }
+  } catch(e) {
+    alUpdateUI('⚠️ Fel vid polling', e.message);
+  }
+}
+
+function alUpdateUI(title, sub) {
+  const el = document.getElementById('al-title'); if (el) el.textContent = title;
+  const el2 = document.getElementById('al-sub'); if (el2) el2.textContent = sub;
+}
+
+function alSendNotification(title, body) {
+  if ('Notification' in window && Notification.permission === 'granted') {
+    new Notification(title, { body, icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🚗</text></svg>' });
+  }
+}
+
+function alRenderTrips() {
+  const el = document.getElementById('al-trips-list');
+  if (!el) return;
+  const trips = getTrips().filter(t => t.autoLogged).slice(0, 5);
+  if (!trips.length) { el.innerHTML = ''; return; }
+  el.innerHTML = '<div style="font-size:12px;color:var(--muted);margin-bottom:8px;margin-top:4px">Senast autologgade resor:</div>'
+    + trips.map(t => `<div class="autolog-trip-item" onclick="openDetail('${t.id}')" style="cursor:pointer">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-weight:600;font-size:13px">${t.date} ${t.startTime||''}-${t.endTime||''}</span>
+        <span style="color:var(--green);font-size:12px">${t.km ? t.km+' km' : '?km'}</span>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">📍 ${(t.startAddr||'Okänd').split(',')[0]} → ${(t.endAddr||'Okänd').split(',')[0]}</div>
+      ${(t.startLat && t.endLat) ? '<div style="font-size:10px;color:var(--accent);margin-top:2px">🗺 Visa karta</div>' : ''}
+    </div>`).join('');
+}
+
+// ══════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════
+document.getElementById('f-date').value = new Date().toISOString().slice(0,10);
+document.getElementById('f-vehicle').value = localStorage.getItem('last_vehicle') || '';
+
+// Check for OAuth callback code stored by callback.html
+(function() {
+  const code = localStorage.getItem('ts_oauth_code');
+  const state = localStorage.getItem('ts_oauth_state');
+  if (code) {
+    localStorage.removeItem('ts_oauth_code');
+    localStorage.removeItem('ts_oauth_state');
+    tsExchangeCode(code, state);
+  }
+})();
+
+// Update Tesla connection status
+tsUpdateStatus(!!localStorage.getItem(LS_TOKEN));
+
+// Start on overview
+nav('overview');
+</script></body></html>
