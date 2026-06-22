@@ -582,6 +582,7 @@ function auroraVisibility(kp,lat,cloudCover){
 // ── MAIN LOAD ──
 async function loadCity(name,lat,lon){
   currentLat=lat;currentLon=lon;currentCity=name;
+  saveLastCity(name,lat,lon);
   showLoading(true);
   try{
     const[data,aurora,marine]=await Promise.all([
@@ -617,7 +618,10 @@ function renderAll(data,name,lat,lon,auroraData,marineData){
         <div class="hero-location">📍 ${name}</div>
         <div class="hero-time">${formatDate(now)} · ${now.toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit',hour12:false})}</div>
       </div>
-      <button class="fav-btn" onclick="toggleFavorite('${name}',${lat},${lon})" id="heroFavBtn" title="Spara som favorit">${isFavorite(name)?'⭐':'☆'}</button>
+      <div style="display:flex;gap:4px">
+        <button class="fav-btn" onclick="setHomeCity('${name}',${lat},${lon})" id="heroHomeBtn" title="Ange som startsida" style="opacity:${isHomeCity(name)?1:.4}">🏠</button>
+        <button class="fav-btn" onclick="toggleFavorite('${name}',${lat},${lon})" id="heroFavBtn" title="Spara som favorit">${isFavorite(name)?'⭐':'☆'}</button>
+      </div>
     </div>
     <div class="hero-main">
       <div class="hero-icon">${icon}</div>
@@ -1270,6 +1274,22 @@ function gpsLocate(){
 // ── FAVORITER ──
 function getFavs(){try{return JSON.parse(localStorage.getItem('nordvader_favs')||'[]')}catch{return[]}}
 function saveFavs(favs){localStorage.setItem('nordvader_favs',JSON.stringify(favs))}
+function saveLastCity(name,lat,lon){try{localStorage.setItem('nordvader_last',JSON.stringify({name,lat,lon}))}catch{}}
+function getLastCity(){try{return JSON.parse(localStorage.getItem('nordvader_last')||'null')}catch{return null}}
+function getHome(){try{return JSON.parse(localStorage.getItem('nordvader_home')||'null')}catch{return null}}
+function isHomeCity(name){const h=getHome();return!!h&&h.name===name}
+function setHomeCity(name,lat,lon){
+  localStorage.setItem('nordvader_home',JSON.stringify({name,lat,lon}));
+  const btn=document.getElementById('heroHomeBtn');
+  if(btn)btn.style.opacity=1;
+  renderFavList();
+}
+function clearHomeCity(){
+  localStorage.removeItem('nordvader_home');
+  const btn=document.getElementById('heroHomeBtn');
+  if(btn)btn.style.opacity=.4;
+  renderFavList();
+}
 
 function isFavorite(name){return getFavs().some(f=>f.name===name)}
 
@@ -1302,6 +1322,7 @@ function renderFavList(){
     <div class="fav-item" onclick="loadCity('${f.name}',${f.lat},${f.lon});closeFavPanel()">
       <span style="font-size:1.1rem">📍</span>
       <span class="fav-name">${f.name}</span>
+      <button class="fav-remove" onclick="event.stopPropagation();${isHomeCity(f.name)?'clearHomeCity()':`setHomeCity('${f.name}',${f.lat},${f.lon})`}" title="Ange som startsida" style="opacity:${isHomeCity(f.name)?1:.4}">🏠</button>
       <button class="fav-remove" onclick="event.stopPropagation();toggleFavorite('${f.name}',${f.lat},${f.lon})" title="Ta bort">✕</button>
     </div>`).join('');
 }
@@ -1324,7 +1345,20 @@ document.addEventListener('click',e=>{
 // ── INIT ──
 document.getElementById('loading').classList.add('hidden');
 renderFavList();
-loadCity('Stockholm',59.3293,18.0686);
+(function initStartCity(){
+  const home=getHome();
+  const last=getLastCity();
+  const start=home||last;
+  if(start){loadCity(start.name,start.lat,start.lon)}
+  else{loadCity('Stockholm',59.3293,18.0686)}
+})();
+
+// ── AUTO-UPPDATERING VARJE TIMME ──
+setInterval(()=>{
+  if(currentLat!=null&&currentLon!=null){
+    loadCity(currentCity,currentLat,currentLon);
+  }
+},60*60*1000);
 
 // ── SERVICE WORKER (PWA) ──
 if('serviceWorker' in navigator){
