@@ -1,4 +1,4 @@
-const CACHE = 'nordvader-v4';
+const CACHE = 'nordvader-v5';
 const STATIC = [
   '/',
   '/index.html',

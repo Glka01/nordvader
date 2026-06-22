@@ -358,6 +358,14 @@ main{max-width:1300px;margin:0 auto;padding:24px 16px;display:grid;grid-template
     <div class="qc" onclick="loadCity('Åre',63.40,13.08)">Åre</div>
     <div class="qc" onclick="loadCity('Kiruna',67.86,20.23)">Kiruna</div>
     <div class="qc" onclick="loadCity('Oulu',65.01,25.47)">Oulu</div>
+    <div class="qc" onclick="loadCity('London',51.51,-0.13)">London</div>
+    <div class="qc" onclick="loadCity('Berlin',52.52,13.40)">Berlin</div>
+    <div class="qc" onclick="loadCity('Paris',48.86,2.35)">Paris</div>
+    <div class="qc" onclick="loadCity('Amsterdam',52.37,4.90)">Amsterdam</div>
+    <div class="qc" onclick="loadCity('Madrid',40.42,-3.70)">Madrid</div>
+    <div class="qc" onclick="loadCity('Rom',41.90,12.50)">Rom</div>
+    <div class="qc" onclick="loadCity('Wien',48.21,16.37)">Wien</div>
+    <div class="qc" onclick="loadCity('Warszawa',52.23,21.01)">Warszawa</div>
   </div>
 </header>
 
@@ -1225,7 +1233,7 @@ document.getElementById('searchInput').addEventListener('keydown',function(e){
 
 async function searchNominatim(q){
   try{
-    const r=await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&countrycodes=SE,NO,DK,FI,IS&limit=5&format=json&accept-language=sv`,{headers:{'Accept-Language':'sv'}});
+    const r=await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&limit=6&format=json&accept-language=sv`,{headers:{'Accept-Language':'sv'}});
     acResults=await r.json();
     showAC(acResults);
   }catch{}
